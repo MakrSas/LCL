@@ -25,10 +25,20 @@ That is the entire Phase 1 third-party surface: **two direct dependencies.**
 an upstream release breaks a build we cannot reproduce locally, which on Windows means we cannot
 debug it at all.
 
-**Bootstrapping caveat:** it cannot be generated here (no Swift toolchain), so the first CI run
-resolves the graph and uploads `Package.resolved` as the `package-resolved` artifact. Commit that
-file, then add `-disableAutomaticPackageResolution` to the resolve step in
-[`ci.yml`](../.github/workflows/ci.yml) so the graph is frozen from then on.
+**Bootstrapping:** it cannot be generated here (no Swift toolchain), so CI resolves the graph and
+uploads it as the `package-resolved` artifact. Committed as of the first green run, pinning:
+
+```
+mlx-swift-lm 3.31.4 · mlx-swift 0.31.6 · GRDB 7.11.1
+swift-syntax 603.0.2 · swift-numerics 1.1.1 · swift-argument-parser 1.8.2
+```
+
+**We deliberately do NOT pass `-disableAutomaticPackageResolution`.** A committed `Package.resolved`
+already pins versions — SwiftPM honours it and only re-resolves when the manifest genuinely requires
+it. Adding the flag would instead make CI *fail* whenever the two drift, and since we cannot
+regenerate `Package.resolved` on Windows, every dependency change would need the flag temporarily
+removed to bootstrap the new graph. Reproducibility comes from the committed file; the flag would only
+add friction.
 
 ---
 
