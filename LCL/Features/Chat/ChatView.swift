@@ -32,9 +32,10 @@ struct ChatView: View {
                 // lighter band under the status bar and above the home indicator.
                 .background(Palette.canvas.ignoresSafeArea())
                 .toolbar { toolbarContent }
-                // The navigation bar's own material was also lightening the top band. The
-                // wordmark sits on the canvas instead.
-                .toolbarBackground(.hidden, for: .navigationBar)
+                // Both are needed. Hiding the background alone still left a hairline under
+                // the bar — that divider is the scroll edge effect, not the material.
+                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
+                .scrollEdgeEffectStyle(.soft, for: .top)
                 .onChange(of: viewModel.messages.last?.blocks.count) { _, _ in
                     // Only follow the stream if the user is already at the bottom. Yanking
                     // someone back down while they are reading is the most common chat-UI

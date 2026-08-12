@@ -23,7 +23,10 @@ struct Composer: View {
 
     var body: some View {
         GlassCluster(cornerRadius: Radius.sheet) {
-            VStack(spacing: Space.tight) {
+            // Generous vertical rhythm: the composer is the thing you touch most, and a
+            // minimum-height box with the controls crowding the text reads as cramped next to
+            // the system's own input surfaces.
+            VStack(alignment: .leading, spacing: Space.base) {
                 // Grows with content, then scrolls internally rather than eating the screen.
                 TextField("Message", text: $text, axis: .vertical)
                     .lineLimit(1...8)
@@ -31,6 +34,7 @@ struct Composer: View {
                     .focused($isFocused)
                     .submitLabel(.return)
                     .padding(.horizontal, Space.hair)
+                    .frame(minHeight: 26)
 
                 // Every control here is a system button style. No hand-built capsules or
                 // circles: only `.glass` / `.glassProminent` stretch under the finger and
@@ -81,8 +85,8 @@ struct Composer: View {
                 // Default control size. `.large` made these overpower the composer — the text
                 // field is the primary element here, not the buttons around it.
             }
-            .padding(.horizontal, Space.base - Space.hair)
-            .padding(.vertical, Space.tight + 2)
+            .padding(.horizontal, Space.base)
+            .padding(.vertical, Space.base)
         }
         .lclAnimation(MotionSystem.standard, value: isStreaming)
         .lclAnimation(MotionSystem.standard, value: canSend)
