@@ -45,30 +45,36 @@ struct SidebarView: View {
             Button(action: onClose) {
                 Image(systemName: "sidebar.left")
             }
-            .buttonStyle(.quiet)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
             .accessibilityLabel("Close sidebar")
         }
         .padding(.horizontal, Space.base)
         .padding(.top, Space.tight)
     }
 
+    /// Both buttons are system glass styles. Prominent for the call to action, plain glass for
+    /// the secondary one, sized with `.controlSize(.large)` rather than hand-set frames.
     private var footer: some View {
         HStack(spacing: Space.tight) {
             Button(action: onNewChat) {
                 Label("New Chat", systemImage: "square.and.pencil")
             }
-            .buttonStyle(.glassPill)
+            .buttonStyle(.glassProminent)
+            .buttonBorderShape(.capsule)
             .accessibilityLabel("New chat")
 
             Spacer(minLength: 0)
 
             Button(action: onOpenSettings) {
                 Image(systemName: "gearshape")
-                    .font(.subheadline)
             }
-            .buttonStyle(.quiet)
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .accessibilityLabel("Settings")
         }
+        .controlSize(.large)
         .padding(.horizontal, Space.base)
         .padding(.bottom, Space.tight)
     }

@@ -32,31 +32,26 @@ struct Composer: View {
                     .submitLabel(.return)
                     .padding(.horizontal, Space.hair)
 
+                // Every control here is a system button style. No hand-built capsules or
+                // circles: only `.glass` / `.glassProminent` stretch under the finger and
+                // throw a highlight, and a painted background cannot imitate that.
                 HStack(spacing: Space.tight) {
                     if supportsThinking {
-                        Button {
-                            thinkingEnabled.toggle()
-                        } label: {
-                            Text("Thinking")
-                                .font(.subheadline)
-                                .padding(.horizontal, Space.tight + 2)
-                                .frame(height: 32)
-                                .background(
-                                    thinkingEnabled ? Color.accentColor.opacity(0.16) : Color.clear,
-                                    in: Capsule()
-                                )
-                                .foregroundStyle(thinkingEnabled ? Color.accentColor : Palette.textSecondary)
-                        }
-                        .buttonStyle(.plain)
-                        .haptic(.toggle, trigger: thinkingEnabled)
-                        .accessibilityLabel("Thinking")
-                        .accessibilityValue(thinkingEnabled ? "On" : "Off")
+                        // A Toggle, not a Button: this is a binary state, and
+                        // `.toggleStyle(.button)` is the platform's own way to express one as
+                        // a control. It renders the on/off state and reports the right
+                        // accessibility traits without us styling either.
+                        Toggle("Thinking", isOn: $thinkingEnabled)
+                            .toggleStyle(.button)
+                            .buttonStyle(.glass)
+                            .buttonBorderShape(.capsule)
+                            .haptic(.toggle, trigger: thinkingEnabled)
                     }
 
                     Spacer(minLength: 0)
 
-                    // Same position and size in both states: the control must not move
-                    // under the user's thumb when generation starts.
+                    // Same position and size in both states: the control must not move under
+                    // the user's thumb when generation starts.
                     Button {
                         if isStreaming {
                             onStop()
@@ -66,20 +61,16 @@ struct Composer: View {
                         }
                     } label: {
                         Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                            .font(.system(size: 15, weight: .semibold))
-                            .foregroundStyle(sendForeground)
-                            // The arrow morphs into the stop square in place, rather than
-                            // one glyph snapping out and another in.
+                            // The arrow morphs into the stop square in place.
                             .contentTransition(.symbolEffect(.replace))
-                            .frame(width: 34, height: 34)
-                            .background(sendBackground, in: Circle())
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
                     .disabled(!isStreaming && !canSend)
-                    .minimumHitTarget()
                     .haptic(.messageSent, trigger: sendTrigger)
                     .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
                 }
+                .controlSize(.large)
             }
             .padding(.horizontal, Space.base - Space.hair)
             .padding(.vertical, Space.tight + 2)
@@ -90,15 +81,5 @@ struct Composer: View {
         // Height only actually changes at line boundaries, so keying on the text animates
         // the growth without animating every keystroke.
         .lclAnimation(MotionSystem.standard, value: text)
-    }
-
-    private var sendBackground: Color {
-        if isStreaming { return Palette.surfaceUser }
-        return canSend ? Color.accentColor : Palette.surfaceUser
-    }
-
-    private var sendForeground: Color {
-        if isStreaming { return Palette.textPrimary }
-        return canSend ? .white : Palette.textTertiary
     }
 }

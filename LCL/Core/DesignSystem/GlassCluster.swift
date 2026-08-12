@@ -93,45 +93,23 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
-/// A prominent accent-tinted glass pill — the one call to action on a screen.
-///
-/// Tinted glass rather than flat fill: it is still chrome floating above content, so it
-/// belongs to the same material family as the composer. Falls back to an opaque accent fill
-/// under Reduce Transparency.
-struct GlassPillButtonStyle: ButtonStyle {
-    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    func makeBody(configuration: Configuration) -> some View {
-        let shape = Capsule(style: .continuous)
-        return configuration.label
-            .font(.subheadline.weight(.semibold))
-            .foregroundStyle(Color.accentColor)
-            .padding(.horizontal, Space.base)
-            .frame(minHeight: 44)
-            .background {
-                if reduceTransparency {
-                    shape.fill(Color.accentColor.opacity(0.22))
-                        .overlay(shape.strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 0.5))
-                } else {
-                    shape.fill(.clear)
-                        .glassEffect(.regular.tint(Color.accentColor.opacity(0.28)).interactive(), in: shape)
-                }
-            }
-            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.97 : 1))
-            .animation(
-                MotionSystem.resolved(MotionSystem.instant, reduceMotion: reduceMotion),
-                value: configuration.isPressed
-            )
-    }
-}
+// There is deliberately NO custom glass button style here.
+//
+// An earlier version had one, and it was fake: it painted a glass background behind a label.
+// The real thing is a system button style — `.buttonStyle(.glass)` and `.glassProminent` —
+// which stretches under the finger, throws a specular highlight, and morphs with its
+// neighbours. None of that can be reproduced by decorating a label, and attempting to is how
+// an app ends up looking almost-native.
+//
+// Rule: never hand-roll a control the platform provides. Use `.buttonStyle(.glass)` /
+// `.glassProminent`, `.buttonBorderShape(...)`, `.controlSize(...)` and `.tint(...)`, and let
+// the system own the interaction.
+//
+// `GlassCluster` above stays, because a *container* surface is a different thing from a
+// control, and `glassEffect` is the right API for that.
 
 extension ButtonStyle where Self == QuietButtonStyle {
     static var quiet: QuietButtonStyle { QuietButtonStyle() }
-}
-
-extension ButtonStyle where Self == GlassPillButtonStyle {
-    static var glassPill: GlassPillButtonStyle { GlassPillButtonStyle() }
 }
 
 extension ButtonStyle where Self == PrimaryButtonStyle {

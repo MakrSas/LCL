@@ -114,16 +114,11 @@ struct ChatView: View {
             }
         } label: {
             Image(systemName: "arrow.down")
-                .font(.subheadline.weight(.semibold))
-                .foregroundStyle(Palette.textPrimary)
-                .frame(width: 36, height: 36)
         }
-        .buttonStyle(.plain)
-        .background {
-            GlassCluster(cornerRadius: 18, spacing: nil, interactive: true) {
-                Color.clear.frame(width: 36, height: 36)
-            }
-        }
+        // System glass, not a glass background behind a plain button.
+        .buttonStyle(.glass)
+        .buttonBorderShape(.circle)
+        .controlSize(.large)
         .padding(.trailing, Layout.gutter)
         .padding(.bottom, Space.tight)
         // Scales up from the corner it will act on, so the control's origin is legible.
@@ -137,6 +132,9 @@ struct ChatView: View {
             Button(action: onOpenSidebar) {
                 Image(systemName: "sidebar.left")
             }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
+            .controlSize(.large)
             .accessibilityLabel("Open sidebar")
         }
         ToolbarItem(placement: .principal) {

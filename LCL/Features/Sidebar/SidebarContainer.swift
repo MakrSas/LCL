@@ -38,6 +38,10 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
 
                 sidebar
                     .frame(width: width)
+                    // Its own raised surface. The container base is true black so no band
+                    // shows at the content's edges, which left the sidebar with no background
+                    // of its own until this.
+                    .background(Palette.canvasRaised, ignoresSafeAreaEdges: .vertical)
                     .opacity(reduceMotion ? (progress > 0.5 ? 1 : 0) : progress)
                     // Slight parallax: the sidebar trails the content rather than moving
                     // with it, which reads as depth instead of a sliding sheet.
@@ -76,21 +80,14 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                         .accessibilityAddTraits(.isButton)
                 }
             }
-            .clipShape(
-                RoundedRectangle(
-                    cornerRadius: Radius.sidebarPeel * progress,
-                    style: .continuous
-                )
-            )
-            .scaleEffect(reduceMotion ? 1 : 1 - 0.05 * progress, anchor: .center)
+            // Offset ONLY. This is the fix for the remaining stutter.
+            //
+            // A translation is a cheap GPU transform. The previous version also animated a
+            // `clipShape` corner radius and a `scaleEffect` over the live chat hierarchy —
+            // a NavigationStack containing a ScrollView — which forced the entire subtree to
+            // re-rasterise on every frame. That cost far more than the peel effect was worth,
+            // so the peel is gone.
             .offset(x: width * progress)
-            // No `.animation(value: progress)` here, and no animated shadow. Both were
-            // causing the stutter: the modifier animated the same change `withAnimation`
-            // was already driving, so two curves fought over one property, and an animated
-            // shadow on a large rounded rect forces the whole surface to re-rasterise every
-            // frame. Movement is driven solely by `withAnimation` in `setOpen`, and during a
-            // drag `dragTranslation` is set with no animation at all, so it tracks the
-            // finger exactly.
     }
 
     // MARK: - Geometry

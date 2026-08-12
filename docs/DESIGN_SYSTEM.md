@@ -27,6 +27,12 @@ Five working principles, each with a testable consequence:
 - A screen that is a vertical stack of rounded cards.
 - Glass behind body text.
 - Custom fonts, custom-drawn switches, custom-drawn navigation.
+- **Hand-rolled controls.** Never build a control the platform provides. A glass background
+  painted behind a label is *not* a glass button: the system style stretches under the finger,
+  throws a specular highlight, and morphs with its neighbours, and none of that is reachable by
+  decorating a view. Use `.buttonStyle(.glass)` / `.glassProminent`, `.buttonBorderShape(...)`,
+  `.controlSize(...)`, `Toggle` with `.toggleStyle(.button)`, and `.tint(...)`. Hand-set frames
+  and hand-mixed state colours on a control are a design review failure.
 - A "dashboard": grids of metric tiles the user did not ask for.
 - Two competing accent colours.
 - Emoji as iconography. **SF Symbols only.**
