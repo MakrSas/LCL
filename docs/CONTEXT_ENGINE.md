@@ -10,37 +10,41 @@ memory is not. Every architectural choice here follows from one rule: **the acti
 
 ## 1. Budget
 
-> **Corrected 2026-08-13.** An earlier version of this document budgeted the model's full 128K.
-> That was a category error: **128K is a model capability, not a device capability.** The KV cache
-> for a long context can run several times the size of the weight file, and the target device is an
-> **iPhone 15 — 6 GB RAM, per-app limit ≈2.5–3 GB**, most of which the 4-bit weights already occupy.
-> Budgeting 128K would guarantee a Jetsam kill. See [RESEARCH_LOG.md](RESEARCH_LOG.md) §9.
+> **Revised twice on 2026-08-13.** First I budgeted the model's full 128K, which was wrong — 128K is a
+> model capability, not a device capability. Then I over-corrected to an 8K default. Both were reasoned
+> without the architecture facts. With them ([RESEARCH_LOG.md](RESEARCH_LOG.md) §9–10),
+> **32K is the right default and the ceiling is set by prefill latency, not memory.**
 
-The working context is therefore `min(model max, device profile)`, chosen at load time from the RAM
-tier. Two profiles for Phase 1; numbers are starting points to be replaced by measurement.
+The working context is `min(model max, device profile)`, chosen at load time from the RAM tier.
 
-| Slot | 8K profile | ≈32K profile | Protected | Notes |
+| Slot | 32K default | 8K fallback | Protected | Notes |
 |---|---|---|---|---|
-| System | 800 | 1 200 | ✅ | identity, rules, safety, output contract |
-| Goal | 200 | 400 | ✅ | current AgentTask goal |
-| Plan | 450 | 1 200 | ✅ | current plan + current step |
-| Decisions | 350 | 1 200 | ✅ | explicit user choices — never dropped |
-| Memory | 350 | 1 200 | — | chat + project + global, ranked |
-| Conversation | 2 200 | 11 900 | — | recent turns, raw |
-| Retrieved | 700 | 3 500 | — | `retrieve_context` results |
-| Files | 400 | 3 000 | — | attached document chunks |
-| Tool results | 800 | 4 500 | — | compacted excerpts + handles |
-| Tool catalog | 350 | 1 200 | — | only tools relevant to this step |
-| Task state | 400 | 1 400 | ✅ | branch, commits, build status, blockers |
-| **Reserved** | **1 000** | **2 000** | ✅ | generation headroom — never allocated |
+| System | 1 200 | 800 | ✅ | identity, rules, safety, output contract |
+| Goal | 400 | 200 | ✅ | current AgentTask goal |
+| Plan | 1 200 | 450 | ✅ | current plan + current step |
+| Decisions | 1 200 | 350 | ✅ | explicit user choices — never dropped |
+| Memory | 1 200 | 350 | — | chat + project + global, ranked |
+| Conversation | 11 900 | 2 200 | — | recent turns, raw |
+| Retrieved | 3 500 | 700 | — | `retrieve_context` results |
+| Files | 3 000 | 400 | — | attached document chunks |
+| Tool results | 4 500 | 800 | — | compacted excerpts + handles |
+| Tool catalog | 1 200 | 350 | — | only tools relevant to this step |
+| Task state | 1 400 | 400 | ✅ | branch, commits, build status, blockers |
+| **Reserved** | **2 000** | **1 000** | ✅ | generation headroom — never allocated |
 
-**8K is the Phase 1 default on a 6 GB device.** Anything larger depends on a quantized KV cache
-(4-bit KV is reported to give ~3× the context at no quality cost) — and whether `mlx-swift-lm` exposes
-one in Swift is **unverified**. Until measured on the actual phone, treat ≈32K as aspirational.
+**Why 32K is affordable:** the KV cache is not the binding constraint on this model. Gemma 4 E2B stacks
+three independent reductions — MQA (one KV head, the physical minimum), a 4:1 sliding-to-global layer
+ratio, and cross-layer KV sharing in which only the first 15 of 35 layers compute their own KV. Only a
+handful of global layers grow with sequence length at all. Add `kvBits: 4` and the cache becomes a
+minor line item next to the ~2–3 GB of weights.
 
-This is precisely why the ContextEngine exists. A small working context makes structured compaction
-and retrieval the load-bearing features rather than nice-to-haves: the app remembers everything, and
-the model is shown only the 8K that matter right now.
+**What actually limits us is time, not space.** Prefill cost grows with context length, and on an A16
+a very long prompt is slow regardless of whether it fits. The 8K fallback exists for that reason and
+for memory-pressure conditions — not as the expected case.
+
+None of which makes the ContextEngine less necessary. It changes what it is *for*: with memory no
+longer the binding constraint, compaction and retrieval earn their place on **quality and latency**.
+32K of well-chosen context beats 128K of raw transcript, and it prefills four times faster.
 
 **Protected slots are never evicted by compaction.** If a protected slot cannot fit, that is an error
 surfaced to the user, not silently truncated data. Losing the current plan or an explicit user

@@ -232,9 +232,47 @@ Mitigations, in order of leverage:
 3. Aggressive unload via `ModelLifecycleCoordinator`, and a low `MLX.GPU.set(cacheLimit:)`.
 4. QAT/OptiQ quants — same size, better quality, so no reason not to.
 
-**Honest bottom line:** Gemma 4 E2B on a 6 GB iPhone 15 is *tight but plausible* with an 8K context
-and the memory entitlement. It is not comfortable, and E4B is almost certainly out of reach on this
-device. The first device test decides it, and the answer is not knowable from CI.
+**Honest bottom line:** Gemma 4 E2B on a 6 GB iPhone 15 is *tight but plausible*. E4B is almost
+certainly out of reach on this device. The first device test decides it, and the answer is not knowable
+from CI.
+
+---
+
+## 10. Why the context can be large after all — architecture facts
+
+The §9 conclusion above ("cap at 8K") was reasoned from a generic transformer. Gemma 4 E2B is not
+generic, and the specifics change the answer.
+
+- **MQA** — multi-query attention, i.e. the one-KV-head case of GQA. The physical minimum of KV per
+  token. `likely`
+- **Sliding-window : global attention in a 4:1 pattern**, with the final layer always global. Only the
+  global layers grow with sequence length; sliding layers have a *fixed* cache. `likely`
+- **Cross-layer KV sharing: 35 layers, but only the first 15 compute their own KV projections.** The
+  final 20 reuse KV from the most recent earlier non-shared layer of the same attention type.
+  Google reports **2.7 GB saved at bf16 on 128K contexts**. `likely`
+
+Net effect: roughly **3 of 35 layers** grow with context. The KV cache is a minor line item beside the
+~2–3 GB of weights — the opposite of the assumption in §9.
+
+### Swift support is present
+
+`mlx-swift-lm` exposes `QuantizedKVCache` (4/8-bit, `groupSize` default 64, `.affine`), and
+`GenerateParameters(kvBits:kvGroupSize:quantizedKVStart:)`. `RotatingKVCache(maxSize:keep:step:)` gives
+sliding windows with attention-sink retention. Prompt caches persist to `.safetensors` via
+`makePromptCache` / `savePromptCache` / `loadPromptCache`.
+— [kv-cache.md](https://github.com/ml-explore/mlx-swift-lm/blob/main/skills/mlx-swift-lm/references/kv-cache.md) `verified`
+
+Two documented `fatalError` traps: `RotatingKVCache.toQuantized()` is unimplemented, and
+`QuantizedKVCache.update()` must be `updateQuantized()`. The first is harmless for us — the rotating
+(sliding) layers are the small fixed ones that need no quantization.
+
+**Revised conclusion: 32K default with `kvBits: 4`.** The real ceiling is **prefill latency** on an
+A16, not memory. Numbers above are architecture-derived estimates, not measurements — the device test
+still decides.
+
+**Lesson recorded:** derive memory budgets from the *specific* architecture. A generic
+"KV cache is several times the weights" rule was wrong here by a large factor, in the pessimistic
+direction, and nearly cost the product 4× its usable context.
 
 ---
 

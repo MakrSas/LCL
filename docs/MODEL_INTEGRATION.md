@@ -163,17 +163,59 @@ func stream(_ request: GenerationRequest) -> AsyncThrowingStream<GenerationEvent
 
 ---
 
-## 6. Context
+## 6. Context and the KV cache
 
-128K is generous but shared with everything. Budget in `CONTEXT_ENGINE.md`; the provider's only jobs
-are to report `maxContextTokens` from `ModelCapabilities` and to count tokens with the real tokenizer
-— **never** an estimate. `chars/4` heuristics cause context overflow crashes at exactly the worst
-moment.
+The provider reports `maxContextTokens` and counts tokens with the **real tokenizer** — never an
+estimate. `chars/4` heuristics cause context-overflow crashes at exactly the worst moment. Budget
+lives in `CONTEXT_ENGINE.md` §1.
 
-KV-cache reuse across turns is a Phase 1 stretch goal: a stable prefix (system + goal + plan) that
-does not change between turns can avoid re-prefill. Worth real latency, but measure before building —
-and note that Gemma 4's sliding-window/full-attention interleave is what broke KV caching for the
-larger variants upstream, so treat cache reuse as unproven until tested.
+### Getting a large context onto a 6 GB phone
+
+Verified Swift API (`mlx-swift-lm` [kv-cache reference](https://github.com/ml-explore/mlx-swift-lm/blob/main/skills/mlx-swift-lm/references/kv-cache.md)):
+
+```swift
+let params = GenerateParameters(
+    kvBits: 4,            // 4 or 8; ~1/4 the fp16 footprint
+    kvGroupSize: 64,
+    quantizedKVStart: 0   // begin quantizing after N tokens
+)
+```
+
+Levers, in order of leverage:
+
+1. **`kvBits: 4`** — one parameter, ~4× less KV memory, reported at no quality cost. Take it.
+2. **`quantizedKVStart`** — keep the most recent tokens at full precision, where attention precision
+   matters most, and quantize the older tail. Costs nothing to try.
+3. **Do not fight the architecture.** MQA + 4:1 sliding/global + cross-layer KV sharing already do more
+   than any tuning we could add. Only ~3 of 35 layers grow with sequence length.
+4. **Weights are the real constraint** (~2–3 GB of a ~2.5–3 GB budget). To buy headroom, quantize
+   *weights* harder — the QAT/OptiQ variants are the same size at better quality — rather than
+   squeezing a cache that is already small.
+
+### Two API traps, both `fatalError`
+
+- `RotatingKVCache.toQuantized()` is **not implemented** and crashes. Sliding-window layers therefore
+  cannot be quantized. This does not hurt us: those layers have a small *fixed* cache, so there is
+  nothing worth quantizing. The layers that grow are global and use a quantizable cache.
+- `QuantizedKVCache.update()` also `fatalError`s — `updateQuantized()` is the correct call.
+
+### Persistent prompt cache
+
+```swift
+let cache = makePromptCache(model: model, parameters: params)
+try savePromptCache(url: fileURL, cache: cache, metadata: ["prompt": stablePrefix])
+let (loadedCache, metadata) = try loadPromptCache(url: fileURL)
+```
+
+Caches serialise to `.safetensors` with metadata, which matters more here than it would elsewhere:
+LCL unloads the model constantly (background, memory pressure, thermal, CI waits — see
+`ARCHITECTURE.md` §9), so without this every resume pays full prefill again. Saving the stable prefix
+— system + goal + plan — turns a reload into a cheap operation.
+
+Worth real latency, so it is a Phase 1 stretch goal, **measured before it is trusted**: Gemma 4's
+sliding-window/full-attention interleave is exactly what broke KV caching for the larger variants
+upstream ([mlx-swift-lm#282](https://github.com/ml-explore/mlx-swift-lm/issues/282)), so cache
+round-tripping on E2B is unproven until tested on the phone.
 
 ---
 
