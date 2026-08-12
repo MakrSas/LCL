@@ -199,6 +199,45 @@ Anything needing reasoning waits for foreground, and we notify the user. See `AG
 
 ---
 
+## 9. Target device: iPhone 15 — and it is the binding constraint
+
+Confirmed by the developer 2026-08-13: the only test device is an **iPhone 15** (not Pro).
+
+- **iPhone 15: A16 Bionic, 6 GB RAM.** Per-app memory limit on a 6 GB iPhone is commonly
+  **≈2.5–3 GB**; Apple does not publish exact figures and they shift between releases. `likely`
+- `com.apple.developer.kernel.increased-memory-limit` raises it, but the amount is unspecified, not
+  available on every device, and iOS may still terminate under pressure.
+  — [zenn.dev/mtfum](https://zenn.dev/mtfum/articles/ios_memory_entitlements?locale=en) `verified`
+- **Good news for a sideloaded build:** AltStore v2.2 (April 2025) shipped official support for
+  sideloading apps *with* the Increased Memory Limit entitlement, and the same applies to SideStore;
+  [`GetMoreRam`](https://github.com/hugeBlack/GetMoreRam) is an AltSign wrapper that adds it without
+  Xcode, and [LiveContainer #388](https://github.com/LiveContainer/LiveContainer/discussions/388)
+  documents doing it without compiling. `verified`
+- ⚠️ **Caveat:** reports indicate the entitlement may require a **paid** certificate registered on the
+  device rather than a free one. Unresolved — **must be tested empirically on the actual phone.** `unverified`
+
+### Why this changes the architecture
+
+Gemma 4 E2B 4-bit weights are ~2–3 GB, and PLE means static weights exceed what "2.3B effective"
+suggests. That already fills the per-app budget before any KV cache, Metal scratch, or the app itself.
+
+**KV cache is the thing that kills it.** At long context the KV cache can reach several times the
+weight-file size — so the 128K context window is unusable on this device regardless of entitlements.
+Mitigations, in order of leverage:
+
+1. **Cap the working context** (8K default on 6 GB). Biggest lever by far — see `CONTEXT_ENGINE.md` §1.
+2. **Quantized KV cache.** Python `mlx-lm` has `QuantizedKVCache` (8-bit, configurable group size);
+   4-bit KV is reported to give ~3× context at zero or negative perf cost. **Whether `mlx-swift-lm`
+   exposes an equivalent in Swift is unverified** and is a Phase 1 device-gate question. `unverified`
+3. Aggressive unload via `ModelLifecycleCoordinator`, and a low `MLX.GPU.set(cacheLimit:)`.
+4. QAT/OptiQ quants — same size, better quality, so no reason not to.
+
+**Honest bottom line:** Gemma 4 E2B on a 6 GB iPhone 15 is *tight but plausible* with an 8K context
+and the memory entitlement. It is not comfortable, and E4B is almost certainly out of reach on this
+device. The first device test decides it, and the answer is not knowable from CI.
+
+---
+
 ## 8. Deliberately not yet researched
 
 These do not affect Phase 1 and will be verified at the start of the phase that needs them.

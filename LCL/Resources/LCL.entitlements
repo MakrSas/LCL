@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!--
+	  Increased Memory Limit.
+
+	  Not a nice-to-have: the target device is an iPhone 15 (6 GB RAM, per-app limit
+	  ≈2.5–3 GB) and Gemma 4 E2B 4-bit weights already occupy ~2–3 GB before any KV cache.
+	  Without this the app is very likely to be Jetsam-killed on model load.
+
+	  CI builds unsigned, so this is not embedded there — the sideloading tool applies it
+	  when it re-signs. AltStore 2.2+ and SideStore support the entitlement for sideloaded
+	  apps. See docs/RESEARCH_LOG.md §9, including the unresolved question of whether a free
+	  certificate is sufficient or a paid one is required.
+
+	  iOS may still terminate the app under pressure. The entitlement raises the ceiling by
+	  an amount Apple does not publish; it does not remove the limit.
+	-->
+	<key>com.apple.developer.kernel.increased-memory-limit</key>
+	<true/>
+</dict>
+</plist>

@@ -176,12 +176,20 @@ Recent
 ┌──────────────────────────────────────┐
 │  Gemma 4 E2B                    ✓    │
 │  Google · 2.3B effective · 4-bit     │
-│  2.5 GB · ~3.1 GB RAM · 128K         │
-│  Thinking · Tools                    │
-│  Recommended: iPhone 15 Pro or newer │
+│  2.5 GB · ~3.1 GB RAM                │
+│  Context 8K on this iPhone           │
+│  Thinking                            │
 │                            [Loaded]  │
 └──────────────────────────────────────┘
 ```
+
+Two honesty rules on this card, both learned the hard way:
+
+- **Context shows the *working* context, not the model's maximum.** Gemma 4 E2B supports 128K; a 6 GB
+  iPhone cannot hold the KV cache for it ([RESEARCH_LOG.md](RESEARCH_LOG.md) §9). Printing "128K" next
+  to a model that will actually run at 8K is exactly the kind of lie spec §80 forbids.
+- **Capability chips list only what LCL supports today.** No `Tools` chip until tool calling exists in
+  Phase 4; no `Vision` until Swift-side Gemma 4 vision is confirmed.
 
 Card fields per spec §7. Actions: Download · Import · Delete · Load · Unload · Set Default.
 

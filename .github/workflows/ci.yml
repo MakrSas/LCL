@@ -163,6 +163,70 @@ jobs:
             test.log
           retention-days: 14
 
+  # Produces an unsigned .ipa for sideloading (SideStore / AltStore / iLoader /
+  # LiveContainer). There is no paid Apple Developer account and no Mac, so this is the only
+  # way the app reaches a real device — and the device is where everything the design spec
+  # actually cares about gets verified.
+  #
+  # The .ipa is unsigned on purpose: the sideloading tool re-signs it with the user's own
+  # certificate and applies the Increased Memory Limit entitlement from
+  # LCL/Resources/LCL.entitlements.
+  ipa:
+    name: Unsigned IPA (sideload)
+    runs-on: macos-26
+    needs: build
+    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: .spm-cache
+          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
+
+      - name: Build for device (Release, unsigned)
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -configuration Release \
+            -sdk iphoneos \
+            -derivedDataPath dd \
+            -clonedSourcePackagesDirPath .spm-cache \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            2>&1 | tee ipa.log
+
+      # An .ipa is just a zip with the .app inside a Payload/ directory.
+      - name: Package .ipa
+        run: |
+          APP="dd/Build/Products/Release-iphoneos/LCL.app"
+          test -d "$APP" || { echo "::error::$APP not found"; ls -R dd/Build/Products || true; exit 1; }
+          mkdir -p Payload
+          cp -R "$APP" Payload/
+          zip -qry "LCL-${GITHUB_SHA:0:7}-unsigned.ipa" Payload
+          ls -lh *.ipa
+          echo "### Sideload artifact" >> "$GITHUB_STEP_SUMMARY"
+          echo "\`LCL-${GITHUB_SHA:0:7}-unsigned.ipa\` — $(du -h *.ipa | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload .ipa
+        uses: actions/upload-artifact@v4
+        with:
+          name: LCL-unsigned-ipa
+          path: "*.ipa"
+          retention-days: 30
+
   warnings:
     name: Warning gate
     runs-on: macos-26

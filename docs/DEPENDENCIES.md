@@ -78,7 +78,7 @@ problem to solve — the pipeline is designed for it.
 | Tests | `xcodebuild test` on an iOS 26 simulator in CI. |
 | Diagnostics | `-resultBundlePath` + `xcresulttool` → compact JSON of errors, so failures are readable from Windows and parseable by the agent. |
 | Formatting | `swift-format` in CI (ships with Xcode). Advisory, not blocking. |
-| Device install | TestFlight via App Store Connect API key, built and signed entirely in CI. Requires the paid Apple Developer Program ($99/yr). |
+| Device install | **Sideloading** — unsigned `.ipa` from CI, installed with SideStore / AltStore / iLoader / LiveContainer. No paid Apple Developer Program needed. Requires the **Increased Memory Limit** entitlement, which AltStore 2.2+ and SideStore support for sideloaded apps (see [RESEARCH_LOG.md](RESEARCH_LOG.md) §9 for the free-vs-paid-certificate caveat). TestFlight stays the option if entitlements turn out to be blocked. |
 
 **What we cannot verify without a Mac or a device:** real spring/haptic feel, actual tokens/sec,
 memory pressure and thermal behaviour under sustained inference, and how glass renders over live
@@ -98,7 +98,7 @@ not on CI green. CI proves it *compiles and its logic holds*; only the phone pro
 | 5 | Metal toolchain missing on the Xcode 27 runner image ([#14450](https://github.com/actions/runner-images/issues/14450)) | medium | Stay on `macos-26`/Xcode 26.6 until resolved. Pin the image explicitly — never `macos-latest`. |
 | 6 | `mlx-swift-lm` is pre-1.0 and moves fast (3.31.x, breaking majors) | medium | Pin exactly; commit `Package.resolved`; `ModelProvider` isolates the whole API surface to one file. |
 | 7 | Multi-GB model download on cellular / interrupted | medium | `URLSession` background config, resumable, Wi-Fi default with explicit cellular opt-in. |
-| 8 | Memory pressure / Jetsam kill while model resident | medium | `ModelLifecycleCoordinator` unloads on pressure, thermal, and background. `MLX.GPU.set(cacheLimit:)` by RAM tier. |
+| 8 | **Memory on the actual target device.** iPhone 15 = 6 GB RAM, per-app limit ≈2.5–3 GB; E2B 4-bit weights are ~2–3 GB before any KV cache | **high** | 8K working context by default (biggest lever), Increased Memory Limit entitlement, quantized KV cache if Swift exposes one, aggressive unload, low `MLX.GPU.set(cacheLimit:)`. **Decided by the first device test, not by CI.** See [RESEARCH_LOG.md](RESEARCH_LOG.md) §9 |
 | 9 | **App Review**: an app that downloads model weights and can modify its own source | high | Weights are data, not code — the established pattern for on-device ML apps. Self-development targets a *GitHub repo*, never live app code; nothing executable is downloaded. **Must be confirmed before submission.** |
 | 10 | Prompt injection from web/MCP/GitHub content reaching an agent with repo write access | high | Taint tracking at the boundary; untrusted content delimited as data; tainted results can never widen permissions or authorize actions; High Impact always needs fresh human consent. |
 | 11 | Search API key must live on-device (no backend) | medium | BYOK per provider, Keychain-stored, replaceable `SearchProvider`. Documented honestly to the user in Privacy. |
