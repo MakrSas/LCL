@@ -31,7 +31,9 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             let progress = progress(width: width)
 
             ZStack(alignment: .leading) {
-                Palette.canvasRaised
+                // True black all the way into the safe areas. Anything lighter here shows as
+                // bands above and below the content once it is inset or rounded.
+                Palette.canvas
                     .ignoresSafeArea()
 
                 sidebar
@@ -82,12 +84,13 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             )
             .scaleEffect(reduceMotion ? 1 : 1 - 0.05 * progress, anchor: .center)
             .offset(x: width * progress)
-            .shadow(color: .black.opacity(0.25 * progress), radius: 24, x: -8, y: 0)
-            // No animation while dragging — only the settle is animated.
-            .animation(
-                isDragging ? nil : MotionSystem.resolved(MotionSystem.sidebar, reduceMotion: reduceMotion),
-                value: progress
-            )
+            // No `.animation(value: progress)` here, and no animated shadow. Both were
+            // causing the stutter: the modifier animated the same change `withAnimation`
+            // was already driving, so two curves fought over one property, and an animated
+            // shadow on a large rounded rect forces the whole surface to re-rasterise every
+            // frame. Movement is driven solely by `withAnimation` in `setOpen`, and during a
+            // drag `dragTranslation` is set with no animation at all, so it tracks the
+            // finger exactly.
     }
 
     // MARK: - Geometry

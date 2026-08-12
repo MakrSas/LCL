@@ -28,8 +28,13 @@ struct ChatView: View {
                     .padding(.horizontal, Layout.gutter)
                     .padding(.bottom, Space.tight)
                 }
-                .background(Palette.canvas)
+                // ignoresSafeArea: a plain background stops at the safe area, which left a
+                // lighter band under the status bar and above the home indicator.
+                .background(Palette.canvas.ignoresSafeArea())
                 .toolbar { toolbarContent }
+                // The navigation bar's own material was also lightening the top band. The
+                // wordmark sits on the canvas instead.
+                .toolbarBackground(.hidden, for: .navigationBar)
                 .onChange(of: viewModel.messages.last?.blocks.count) { _, _ in
                     // Only follow the stream if the user is already at the bottom. Yanking
                     // someone back down while they are reading is the most common chat-UI
@@ -87,19 +92,18 @@ struct ChatView: View {
         }
     }
 
-    /// Wordmark and one line. No suggested-prompt grid — that is what makes an app feel like
-    /// a demo.
+    /// Just the wordmark, centred. The tagline belonged in onboarding, not on every empty
+    /// chat, and no suggested-prompt grid — that is what makes an app feel like a demo.
     private var emptyState: some View {
-        VStack(spacing: Space.tight) {
-            Text("LCL")
-                .font(.largeTitle.weight(.semibold))
-            Text("Your AI, running on your iPhone.")
-                .font(.subheadline)
-                .foregroundStyle(Palette.textSecondary)
-        }
-        .frame(maxWidth: .infinity)
-        .padding(.top, 120)
-        .accessibilityElement(children: .combine)
+        Text("LCL")
+            .font(.largeTitle.weight(.semibold))
+            .foregroundStyle(Palette.textPrimary)
+            // Fills the scroll container's height so it centres in the visible area, rather
+            // than sitting just above the composer where `defaultScrollAnchor(.bottom)` had
+            // pinned it. No magic number.
+            .frame(maxWidth: .infinity)
+            .containerRelativeFrame(.vertical, alignment: .center)
+            .accessibilityAddTraits(.isHeader)
     }
 
     private func scrollToBottomButton(_ scroller: ScrollViewProxy) -> some View {

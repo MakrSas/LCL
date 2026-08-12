@@ -29,14 +29,10 @@ enum Palette {
     /// User messages only. Assistant prose is never given a surface.
     static let surfaceUser = Color(.tertiarySystemFill)
 
-    /// A single restrained hue, for interactive accents and nothing else. Teal deliberately
-    /// avoids the violet/indigo gradient cliché; the dark variant is lifted because the
-    /// light one fails contrast on true black.
-    static let accent = Color(UIColor { traits in
-        traits.userInterfaceStyle == .dark
-            ? UIColor(red: 0.373, green: 0.702, blue: 0.675, alpha: 1) // #5FB3AC
-            : UIColor(red: 0.184, green: 0.435, blue: 0.420, alpha: 1) // #2F6F6B
-    })
+    // No `accent` here on purpose. The accent is user-selectable (`AccentChoice` in
+    // Theme.swift) and applied once as `.tint()` at the root, so components read
+    // `Color.accentColor`. A palette constant alongside that would be a second source of
+    // truth, and the two would drift.
 
     static let separator = Color(.separator)
     static let textPrimary = Color(.label)

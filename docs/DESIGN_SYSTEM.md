@@ -44,13 +44,20 @@ adds exactly one brand hue and a small set of role tokens.
 A single restrained hue used for interactive accents and nothing else. **Never** for surfaces,
 message backgrounds, or decoration.
 
+The accent is **user-selectable** in Settings → Appearance: Teal (default), Blue, Indigo, Amber, Rose,
+Graphite. The rule is "one accent at a time", not "one hardcoded hue".
+
 ```
-lclAccent   light  #2F6F6B   (deep teal — calm, not "AI purple")
-            dark   #5FB3AC   (lifted for OLED contrast on true black)
+teal   light #2F6F6B   dark #5FB3AC   (default — calm, not "AI purple")
 ```
 
-Teal deliberately avoids the violet/indigo gradient cliché of AI apps (spec §74: our own identity, no
-borrowed branding).
+Each choice carries a lifted dark variant, because a colour that reads on white fails on true black.
+Teal as the default deliberately avoids the violet/indigo gradient cliché of AI apps (spec §74: our own
+identity, no borrowed branding).
+
+**Implementation:** `AccentChoice` is applied once as `.tint()` at the root, and components read
+`Color.accentColor`. There is deliberately **no** `Palette.accent` — a palette constant beside a tint
+would be a second source of truth and the two would drift.
 
 ### Role tokens
 

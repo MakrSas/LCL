@@ -42,10 +42,10 @@ struct Composer: View {
                                 .padding(.horizontal, Space.tight + 2)
                                 .frame(height: 32)
                                 .background(
-                                    thinkingEnabled ? Palette.accent.opacity(0.16) : Color.clear,
+                                    thinkingEnabled ? Color.accentColor.opacity(0.16) : Color.clear,
                                     in: Capsule()
                                 )
-                                .foregroundStyle(thinkingEnabled ? Palette.accent : Palette.textSecondary)
+                                .foregroundStyle(thinkingEnabled ? Color.accentColor : Palette.textSecondary)
                         }
                         .buttonStyle(.plain)
                         .haptic(.toggle, trigger: thinkingEnabled)
@@ -94,7 +94,7 @@ struct Composer: View {
 
     private var sendBackground: Color {
         if isStreaming { return Palette.surfaceUser }
-        return canSend ? Palette.accent : Palette.surfaceUser
+        return canSend ? Color.accentColor : Palette.surfaceUser
     }
 
     private var sendForeground: Color {

@@ -6,7 +6,9 @@ struct AppRoot: View {
     /// Phase 1 runs on the mock provider. Gemma4Provider arrives in Step 7 and drops in
     /// behind the same `ModelProvider` protocol without any view changing.
     @State private var viewModel = ChatViewModel(provider: MockModelProvider())
+    @State private var settings = AppSettings()
     @State private var isSidebarOpen = false
+    @State private var showSettings = false
 
     var body: some View {
         SidebarContainer(isOpen: $isSidebarOpen) {
@@ -16,6 +18,7 @@ struct AppRoot: View {
                     viewModel.clear()
                     setSidebar(open: false)
                 },
+                onOpenSettings: { showSettings = true },
                 onClose: { setSidebar(open: false) }
             )
         } content: {
@@ -25,8 +28,15 @@ struct AppRoot: View {
                 }
             }
         }
-        .background(Palette.canvas)
-        .preferredColorScheme(nil)
+        .background(Palette.canvas.ignoresSafeArea())
+        // One tint at the root propagates the chosen accent to every control, so components
+        // read `Color.accentColor` rather than each one reaching for a palette constant.
+        .tint(settings.accent.color)
+        .environment(settings)
+        .sheet(isPresented: $showSettings) {
+            SettingsSheet()
+                .environment(settings)
+        }
     }
 
     /// Derived from the transcript for now. Real chat history lands with persistence

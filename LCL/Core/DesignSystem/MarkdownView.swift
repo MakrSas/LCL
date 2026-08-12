@@ -417,7 +417,7 @@ enum SyntaxHighlighter {
             }
             for token in line.split(whereSeparator: { !$0.isLetter && $0 != "_" }) {
                 if set.contains(String(token)) {
-                    apply(Palette.accent, to: String(token), in: &output, wholeWord: true)
+                    apply(Color.accentColor, to: String(token), in: &output, wholeWord: true)
                 }
             }
         }

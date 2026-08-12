@@ -6,6 +6,7 @@ import SwiftUI
 struct SidebarView: View {
     let recentTitles: [String]
     let onNewChat: () -> Void
+    let onOpenSettings: () -> Void
     let onClose: () -> Void
 
     var body: some View {
@@ -52,17 +53,21 @@ struct SidebarView: View {
     }
 
     private var footer: some View {
-        HStack {
+        HStack(spacing: Space.tight) {
             Button(action: onNewChat) {
-                Label("New Chat", systemImage: "plus")
-                    .font(.subheadline.weight(.medium))
+                Label("New Chat", systemImage: "square.and.pencil")
+            }
+            .buttonStyle(.glassPill)
+            .accessibilityLabel("New chat")
+
+            Spacer(minLength: 0)
+
+            Button(action: onOpenSettings) {
+                Image(systemName: "gearshape")
+                    .font(.subheadline)
             }
             .buttonStyle(.quiet)
-            .foregroundStyle(Palette.accent)
-
-            Spacer()
-
-            // Settings has no screen yet, so it is not a control yet.
+            .accessibilityLabel("Settings")
         }
         .padding(.horizontal, Space.base)
         .padding(.bottom, Space.tight)

@@ -82,7 +82,7 @@ struct PrimaryButtonStyle: ButtonStyle {
             .padding(.horizontal, Space.base)
             .frame(minHeight: 44)
             .background(
-                isEnabled ? Palette.accent : Palette.surfaceUser,
+                isEnabled ? Color.accentColor : Palette.surfaceUser,
                 in: RoundedRectangle(cornerRadius: Radius.control, style: .continuous)
             )
             .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.97 : 1))
@@ -93,8 +93,45 @@ struct PrimaryButtonStyle: ButtonStyle {
     }
 }
 
+/// A prominent accent-tinted glass pill — the one call to action on a screen.
+///
+/// Tinted glass rather than flat fill: it is still chrome floating above content, so it
+/// belongs to the same material family as the composer. Falls back to an opaque accent fill
+/// under Reduce Transparency.
+struct GlassPillButtonStyle: ButtonStyle {
+    @Environment(\.accessibilityReduceTransparency) private var reduceTransparency
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    func makeBody(configuration: Configuration) -> some View {
+        let shape = Capsule(style: .continuous)
+        return configuration.label
+            .font(.subheadline.weight(.semibold))
+            .foregroundStyle(Color.accentColor)
+            .padding(.horizontal, Space.base)
+            .frame(minHeight: 44)
+            .background {
+                if reduceTransparency {
+                    shape.fill(Color.accentColor.opacity(0.22))
+                        .overlay(shape.strokeBorder(Color.accentColor.opacity(0.5), lineWidth: 0.5))
+                } else {
+                    shape.fill(.clear)
+                        .glassEffect(.regular.tint(Color.accentColor.opacity(0.28)).interactive(), in: shape)
+                }
+            }
+            .scaleEffect(reduceMotion ? 1 : (configuration.isPressed ? 0.97 : 1))
+            .animation(
+                MotionSystem.resolved(MotionSystem.instant, reduceMotion: reduceMotion),
+                value: configuration.isPressed
+            )
+    }
+}
+
 extension ButtonStyle where Self == QuietButtonStyle {
     static var quiet: QuietButtonStyle { QuietButtonStyle() }
+}
+
+extension ButtonStyle where Self == GlassPillButtonStyle {
+    static var glassPill: GlassPillButtonStyle { GlassPillButtonStyle() }
 }
 
 extension ButtonStyle where Self == PrimaryButtonStyle {
