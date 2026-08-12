@@ -31,8 +31,12 @@
       selectedDebuggerIdentifier = "Xcode.DebuggerFoundation.Debugger.LLDB"
       selectedLauncherIdentifier = "Xcode.DebuggerFoundation.Launcher.LLDB"
       shouldUseLaunchSchemeArgsEnv = "YES">
-      <TestPlans>
-      </TestPlans>
+      <!--
+        No <TestPlans> element here, deliberately. An empty <TestPlans></TestPlans> makes
+        Xcode treat the scheme as test-plan-based with zero plans, which silently ignores
+        <Testables> below and fails with "Scheme LCL is not currently configured for the
+        test action."
+      -->
       <Testables>
          <TestableReference
             skipped = "NO">
