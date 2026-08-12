@@ -46,13 +46,27 @@ jobs:
           restore-keys: |
             spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
 
+      # No Package.resolved is committed yet: it cannot be generated on Windows (no Swift
+      # toolchain). The runner resolves it and we upload it below, so it can be committed
+      # afterwards and pinned from then on. See docs/DEPENDENCIES.md ("Version pinning").
       - name: Resolve dependencies
         run: |
           xcodebuild -resolvePackageDependencies \
             -project "$PROJECT" \
             -scheme "$SCHEME" \
-            -clonedSourcePackagesDirPath .spm-cache \
-            -disableAutomaticPackageResolution
+            -clonedSourcePackagesDirPath .spm-cache
+          echo "--- resolved graph ---"
+          cat LCL.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved 2>/dev/null \
+            || echo "(no Package.resolved produced)"
+
+      - name: Upload Package.resolved
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: package-resolved
+          path: LCL.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
+          if-no-files-found: warn
+          retention-days: 14
 
       # Compile-only check. No signing: we have no certificates and do not need them to
       # know whether the code is correct.

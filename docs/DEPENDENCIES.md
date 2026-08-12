@@ -21,9 +21,14 @@ That is the entire Phase 1 third-party surface: **two direct dependencies.**
 
 ### Version pinning
 
-`Package.resolved` is committed. CI builds from it and never auto-resolves to newer versions —
-otherwise an upstream release breaks a build we cannot reproduce locally, which on Windows means we
-cannot debug it at all.
+`Package.resolved` must be committed and CI must then build from it without re-resolving — otherwise
+an upstream release breaks a build we cannot reproduce locally, which on Windows means we cannot
+debug it at all.
+
+**Bootstrapping caveat:** it cannot be generated here (no Swift toolchain), so the first CI run
+resolves the graph and uploads `Package.resolved` as the `package-resolved` artifact. Commit that
+file, then add `-disableAutomaticPackageResolution` to the resolve step in
+[`ci.yml`](../.github/workflows/ci.yml) so the graph is frozen from then on.
 
 ---
 
