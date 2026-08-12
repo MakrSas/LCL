@@ -1,18 +1,25 @@
 import SwiftUI
 
-/// An interactive, finger-following drawer.
+/// An interactive, finger-following drawer that slides **over** the content.
 ///
 /// `NavigationSplitView` collapses to a stack on iPhone and gives no drag-to-reveal drawer,
 /// so this is a custom container (docs/PRODUCT_SPEC.md §6).
 ///
-/// The details that decide whether it feels native:
-///   • 1:1 with the finger, with **no animation while dragging** — animating during a drag
-///     is what makes a drawer feel laggy.
-///   • velocity-aware settle via `predictedEndTranslation`, so a fast flick opens even from
-///     a short distance.
-///   • interruptible: the settle spring can be grabbed mid-flight.
-///   • one latched haptic at the threshold, so wobbling across it does not chatter.
-///   • a real button for VoiceOver, because an edge swipe is not discoverable.
+/// ## Why the content does not move
+///
+/// It used to. Three attempts at making that smooth failed, and the reason is Liquid Glass:
+/// glass samples whatever is behind it, and the composer and toolbar are glass *inside* the
+/// chat. Translating that content forced every glass surface to re-sample its backdrop on
+/// every frame — so the more correctly we used the system's glass controls, the worse the
+/// drawer stuttered.
+///
+/// Now only the sidebar moves: a plain `VStack` of a few rows with an opaque background, which
+/// is a cheap translation. The content stays put and merely dims, so nothing behind the glass
+/// changes and nothing needs re-sampling.
+///
+/// Kept from before: 1:1 finger tracking with no animation during the drag, velocity-aware
+/// settle via `predictedEndTranslation`, an interruptible spring, a latched threshold haptic,
+/// and a real button for VoiceOver.
 struct SidebarContainer<Sidebar: View, Content: View>: View {
     @Binding var isOpen: Bool
     @ViewBuilder var sidebar: Sidebar
@@ -31,26 +38,26 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             let progress = progress(width: width)
 
             ZStack(alignment: .leading) {
-                // True black all the way into the safe areas. Anything lighter here shows as
-                // bands above and below the content once it is inset or rounded.
-                Palette.canvas
-                    .ignoresSafeArea()
+                // Static. Never offset, never scaled — see the note above.
+                content
+                    .disabled(isOpen)
+
+                if progress > 0 {
+                    Color.black
+                        .opacity(0.45 * progress)
+                        .ignoresSafeArea()
+                        .onTapGesture { setOpen(false) }
+                        .gesture(drag(width: width))
+                        .accessibilityLabel("Close sidebar")
+                        .accessibilityAddTraits(.isButton)
+                }
 
                 sidebar
                     .frame(width: width)
-                    // Its own raised surface. The container base is true black so no band
-                    // shows at the content's edges, which left the sidebar with no background
-                    // of its own until this.
                     .background(Palette.canvasRaised, ignoresSafeAreaEdges: .vertical)
-                    .opacity(reduceMotion ? (progress > 0.5 ? 1 : 0) : progress)
-                    // Slight parallax: the sidebar trails the content rather than moving
-                    // with it, which reads as depth instead of a sliding sheet.
-                    .offset(x: reduceMotion ? 0 : -width * 0.22 * (1 - progress))
+                    .offset(x: -width * (1 - progress))
                     .accessibilityHidden(progress < 0.9)
-
-                contentSurface(width: width, progress: progress)
             }
-            .contentShape(Rectangle())
             .overlay(alignment: .leading) {
                 // Edge grab strip, only when closed. Keeping the gesture off the transcript
                 // means it never competes with vertical scrolling.
@@ -64,30 +71,6 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             }
             .haptic(.sidebarThreshold, trigger: latch.crossings)
         }
-    }
-
-    private func contentSurface(width: CGFloat, progress: CGFloat) -> some View {
-        content
-            .disabled(isOpen)
-            .overlay {
-                if progress > 0 {
-                    Color.black
-                        .opacity(0.38 * progress)
-                        .ignoresSafeArea()
-                        .onTapGesture { setOpen(false) }
-                        .gesture(drag(width: width))
-                        .accessibilityLabel("Close sidebar")
-                        .accessibilityAddTraits(.isButton)
-                }
-            }
-            // Offset ONLY. This is the fix for the remaining stutter.
-            //
-            // A translation is a cheap GPU transform. The previous version also animated a
-            // `clipShape` corner radius and a `scaleEffect` over the live chat hierarchy —
-            // a NavigationStack containing a ScrollView — which forced the entire subtree to
-            // re-rasterise on every frame. That cost far more than the peel effect was worth,
-            // so the peel is gone.
-            .offset(x: width * progress)
     }
 
     // MARK: - Geometry

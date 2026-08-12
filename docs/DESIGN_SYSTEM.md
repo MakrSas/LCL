@@ -225,6 +225,7 @@ Usage:
 | Streaming text | no animation on the text itself — see below |
 | Sidebar drag | direct 1:1 to finger, **no animation while dragging** |
 | Sidebar settle | `sidebar`, initial velocity from `predictedEndTranslation` |
+| Sidebar reveal | the **drawer** moves, never the content — see below |
 | Sheet | system presentation, untouched |
 | Composer grows | `standard` on height |
 | Tool card expands | `standard` height + opacity |
@@ -240,6 +241,21 @@ immediate cross-fade with no translation. Nothing becomes non-functional — it 
 
 Gesture-driven motion must be **interruptible**: a spring settle that cannot be grabbed mid-flight is
 the single clearest tell of non-native UI.
+
+### Never animate a view that contains glass
+
+Glass samples whatever sits behind it, so **moving, scaling or clipping a view that contains a glass
+surface forces that glass to re-sample its backdrop every frame.** This is expensive, and it gets worse
+the more correctly you use the system's glass controls.
+
+Learned the hard way: the sidebar originally pushed the chat aside, and the chat contains a glass
+composer and a glass toolbar. Three attempts to smooth it failed — removing an animated shadow, then a
+duplicated animation, then an animated corner radius and scale — because none of them was the real
+cost. The fix was structural: **the drawer slides over static content, which only dims.** Only a plain
+`VStack` with an opaque background translates.
+
+Rule: animate opaque things. If a transform must cross a glass surface, move the glass *itself* rather
+than a container holding it.
 
 ---
 

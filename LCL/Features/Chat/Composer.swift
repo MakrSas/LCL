@@ -70,7 +70,8 @@ struct Composer: View {
                     .haptic(.messageSent, trigger: sendTrigger)
                     .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
                 }
-                .controlSize(.large)
+                // Default control size. `.large` made these overpower the composer — the text
+                // field is the primary element here, not the buttons around it.
             }
             .padding(.horizontal, Space.base - Space.hair)
             .padding(.vertical, Space.tight + 2)

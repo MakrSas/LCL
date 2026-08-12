@@ -129,12 +129,11 @@ struct ChatView: View {
     @ToolbarContentBuilder
     private var toolbarContent: some ToolbarContent {
         ToolbarItem(placement: .topBarLeading) {
+            // No button style here. Toolbar items already get the system glass treatment on
+            // this OS; adding `.glass` on top produced a circle inside a circle.
             Button(action: onOpenSidebar) {
                 Image(systemName: "sidebar.left")
             }
-            .buttonStyle(.glass)
-            .buttonBorderShape(.circle)
-            .controlSize(.large)
             .accessibilityLabel("Open sidebar")
         }
         ToolbarItem(placement: .principal) {
