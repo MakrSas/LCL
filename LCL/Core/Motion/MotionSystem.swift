@@ -73,13 +73,3 @@ private struct AppearOnce: ViewModifier {
             }
     }
 }
-
-private struct ResolvedAnimation<V: Equatable>: ViewModifier {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    let animation: Animation
-    let value: V
-
-    func body(content: Content) -> some View {
-        content.animation(MotionSystem.resolved(animation, reduceMotion: reduceMotion), value: value)
-    }
-}
