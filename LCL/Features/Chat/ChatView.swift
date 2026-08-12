@@ -59,17 +59,17 @@ struct ChatView: View {
     private var transcript: some View {
         ScrollView {
             LazyVStack(alignment: .leading, spacing: Space.loose) {
-                if viewModel.messages.isEmpty {
-                    emptyState
-                } else {
-                    ForEach(viewModel.messages) { message in
-                        MessageView(
-                            message: message,
-                            onCopy: { UIPasteboard.general.string = message.text },
-                            onRegenerate: viewModel.regenerate
-                        )
-                        .id(message.id)
-                    }
+                // Nothing at all when empty. The wordmark was decoration, and giving it the
+                // container's height made an empty chat scrollable, which it must not be.
+                // A useful empty state arrives with persistence (Step 2), when there is real
+                // recent history to list.
+                ForEach(viewModel.messages) { message in
+                    MessageView(
+                        message: message,
+                        onCopy: { UIPasteboard.general.string = message.text },
+                        onRegenerate: viewModel.regenerate
+                    )
+                    .id(message.id)
                 }
 
                 if let errorMessage = viewModel.errorMessage {
@@ -91,20 +91,6 @@ struct ChatView: View {
         } action: { _, nearBottom in
             isNearBottom = nearBottom
         }
-    }
-
-    /// Just the wordmark, centred. The tagline belonged in onboarding, not on every empty
-    /// chat, and no suggested-prompt grid — that is what makes an app feel like a demo.
-    private var emptyState: some View {
-        Text("LCL")
-            .font(.largeTitle.weight(.semibold))
-            .foregroundStyle(Palette.textPrimary)
-            // Fills the scroll container's height so it centres in the visible area, rather
-            // than sitting just above the composer where `defaultScrollAnchor(.bottom)` had
-            // pinned it. No magic number.
-            .frame(maxWidth: .infinity)
-            .containerRelativeFrame(.vertical, alignment: .center)
-            .accessibilityAddTraits(.isHeader)
     }
 
     private func scrollToBottomButton(_ scroller: ScrollViewProxy) -> some View {

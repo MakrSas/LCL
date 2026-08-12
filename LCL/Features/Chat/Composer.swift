@@ -23,70 +23,61 @@ struct Composer: View {
 
     var body: some View {
         GlassCluster(cornerRadius: Radius.sheet) {
-            // Generous vertical rhythm: the composer is the thing you touch most, and a
-            // minimum-height box with the controls crowding the text reads as cramped next to
-            // the system's own input surfaces.
-            VStack(alignment: .leading, spacing: Space.base) {
+            // One row that grows, rather than two layouts swapped on focus. Swapping would
+            // recreate the TextField at the exact moment it gains focus — losing that focus and
+            // collapsing it straight back. This is compact when idle and taller as you type,
+            // with the controls staying at the bottom.
+            HStack(alignment: .bottom, spacing: Space.tight) {
+                // Options live behind `+` rather than as pills along the composer.
+                //
+                // A plain `Menu` with a `Toggle` inside: the system draws the checkmark, the
+                // material and the presentation, and reports the right accessibility traits.
+                // Camera, Photos, Files and Plugins join this menu when those features exist —
+                // today it holds the one option that is real.
+                Menu {
+                    if supportsThinking {
+                        Toggle(isOn: $thinkingEnabled) {
+                            Label("Thinking", systemImage: "sparkles")
+                        }
+                    }
+                } label: {
+                    Image(systemName: "plus")
+                }
+                .buttonStyle(.glass)
+                .buttonBorderShape(.circle)
+                .haptic(.menuOpened, trigger: thinkingEnabled)
+                .accessibilityLabel("Options")
+
                 // Grows with content, then scrolls internally rather than eating the screen.
                 TextField("Message", text: $text, axis: .vertical)
                     .lineLimit(1...8)
                     .font(.body)
                     .focused($isFocused)
                     .submitLabel(.return)
-                    .padding(.horizontal, Space.hair)
-                    .frame(minHeight: 26)
+                    .padding(.vertical, Space.tight)
 
-                // Every control here is a system button style. No hand-built capsules or
-                // circles: only `.glass` / `.glassProminent` stretch under the finger and
-                // throw a highlight, and a painted background cannot imitate that.
-                HStack(spacing: Space.tight) {
-                    // Options live behind `+` rather than as pills along the composer.
-                    //
-                    // A plain `Menu` with a `Toggle` inside: the system draws the checkmark,
-                    // the material and the presentation, and reports the right accessibility
-                    // traits. Camera, Photos, Files and Plugins join this menu when those
-                    // features exist — today it holds the one option that is real.
-                    Menu {
-                        if supportsThinking {
-                            Toggle(isOn: $thinkingEnabled) {
-                                Label("Thinking", systemImage: "sparkles")
-                            }
-                        }
-                    } label: {
-                        Image(systemName: "plus")
+                // Same position and size in both states: the control must not move under the
+                // user's thumb when generation starts.
+                Button {
+                    if isStreaming {
+                        onStop()
+                    } else if canSend {
+                        sendTrigger += 1
+                        onSend()
                     }
-                    .buttonStyle(.glass)
-                    .buttonBorderShape(.circle)
-                    .haptic(.menuOpened, trigger: thinkingEnabled)
-                    .accessibilityLabel("Options")
-
-                    Spacer(minLength: 0)
-
-                    // Same position and size in both states: the control must not move under
-                    // the user's thumb when generation starts.
-                    Button {
-                        if isStreaming {
-                            onStop()
-                        } else if canSend {
-                            sendTrigger += 1
-                            onSend()
-                        }
-                    } label: {
-                        Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                            // The arrow morphs into the stop square in place.
-                            .contentTransition(.symbolEffect(.replace))
-                    }
-                    .buttonStyle(.glassProminent)
-                    .buttonBorderShape(.circle)
-                    .disabled(!isStreaming && !canSend)
-                    .haptic(.messageSent, trigger: sendTrigger)
-                    .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
+                } label: {
+                    Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                        // The arrow morphs into the stop square in place.
+                        .contentTransition(.symbolEffect(.replace))
                 }
-                // Default control size. `.large` made these overpower the composer — the text
-                // field is the primary element here, not the buttons around it.
+                .buttonStyle(.glassProminent)
+                .buttonBorderShape(.circle)
+                .disabled(!isStreaming && !canSend)
+                .haptic(.messageSent, trigger: sendTrigger)
+                .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
             }
-            .padding(.horizontal, Space.base)
-            .padding(.vertical, Space.base)
+            .padding(.horizontal, Space.tight + 2)
+            .padding(.vertical, Space.tight)
         }
         .lclAnimation(MotionSystem.standard, value: isStreaming)
         .lclAnimation(MotionSystem.standard, value: canSend)
