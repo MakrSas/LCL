@@ -125,6 +125,8 @@ jobs:
     name: Unsigned IPA (sideload)
     runs-on: macos-26
     timeout-minutes: 45
+    permissions:
+      contents: write # to publish the rolling prerelease below
     steps:
       - uses: actions/checkout@v5
 
@@ -194,6 +196,44 @@ jobs:
           name: LCL-unsigned-ipa
           path: "*.ipa"
           retention-days: 30
+
+      # Actions artifacts are always served wrapped in a .zip, so on a phone you end up
+      # unzipping a zip to get an .ipa that is itself a zip. Release assets are served
+      # verbatim, and SideStore/AltStore can install straight from a URL — no unzipping and
+      # no Files.app round trip.
+      #
+      # One rolling prerelease with a fixed tag and filename, so the download URL never
+      # changes and can be bookmarked or pasted into SideStore once:
+      #   https://github.com/${{ github.repository }}/releases/download/dev-latest/LCL.ipa
+      - name: Publish rolling dev build
+        if: github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          cp LCL-*.ipa LCL.ipa
+          NOTES=$(printf '%s\n' \
+            "Unsigned development build — install with SideStore/AltStore (preferred) or LiveContainer." \
+            "" \
+            "**Direct link (stable, always the newest build):**" \
+            "\`https://github.com/${GITHUB_REPOSITORY}/releases/download/dev-latest/LCL.ipa\`" \
+            "" \
+            "Commit: \`${GITHUB_SHA}\`" \
+            "" \
+            "Needs the Increased Memory Limit entitlement applied at signing time —" \
+            "without it a 6 GB iPhone will likely Jetsam-kill the app on model load." \
+            "See docs/RESEARCH_LOG.md §9.")
+          if gh release view dev-latest >/dev/null 2>&1; then
+            gh release edit dev-latest --notes "$NOTES"
+          else
+            gh release create dev-latest --prerelease --title "LCL — dev build" --notes "$NOTES"
+          fi
+          gh release upload dev-latest LCL.ipa --clobber
+          {
+            echo "### Install"
+            echo "\`\`\`"
+            echo "https://github.com/${GITHUB_REPOSITORY}/releases/download/dev-latest/LCL.ipa"
+            echo "\`\`\`"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload diagnostics
         if: always()
