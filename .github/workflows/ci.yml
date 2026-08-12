@@ -1,13 +1,30 @@
 name: CI
 
 # CI is our compiler. Development happens on Windows; this is the only macOS in the project.
-# Every job must produce output a human on Windows (and the agent) can read without Xcode.
+#
+# Speed is a feature here, because a slow pipeline is a slow development loop and there is no
+# local alternative to fall back on. Three things keep it quick:
+#   1. Docs-only pushes do not build at all (paths-ignore below).
+#   2. Two jobs, not three — the old device-Debug `build` job duplicated what `ipa` already
+#      proves, so it is gone.
+#   3. DerivedData is cached, so mlx-swift + swift-syntax macros + Metal shaders are compiled
+#      once per dependency graph rather than on every push.
 
 on:
   push:
     branches: [main, "ai/**", "dev/**"]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
   pull_request:
     branches: [main]
+    paths-ignore:
+      - "**.md"
+      - "docs/**"
+      - "LICENSE"
+      - ".gitignore"
   workflow_dispatch:
 
 concurrency:
@@ -19,15 +36,18 @@ concurrency:
 env:
   # Pinned deliberately. Never `macos-latest` — a silent image bump we cannot reproduce
   # locally would be undebuggable from Windows.
-  # Xcode 26.6 = iOS 26 SDK. Xcode 27 image is still public preview and reportedly ships
+  # Xcode 26.6 = iOS 26 SDK. The Xcode 27 image is still public preview and reportedly ships
   # without the Metal toolchain (actions/runner-images#14450), which MLX needs.
   XCODE_VERSION: "26.6"
   SCHEME: LCL
   PROJECT: LCL.xcodeproj
+  # Bump to bust the DerivedData cache if it ever goes stale.
+  CACHE_VERSION: v1
 
 jobs:
-  build:
-    name: Build (iOS)
+  # Fast feedback plus the only automated verification of the agent loop's invariants.
+  test:
+    name: Test (iOS Simulator)
     runs-on: macos-26
     timeout-minutes: 45
     steps:
@@ -37,103 +57,29 @@ jobs:
         run: |
           sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
           xcodebuild -version
-          echo "--- available SDKs ---"
-          xcodebuild -showsdks | grep -i ios || true
 
       - name: Cache SPM
         uses: actions/cache@v4
         with:
           path: .spm-cache
-          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
-          restore-keys: |
-            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
+          key: spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: spm-${{ env.XCODE_VERSION }}-
 
-      # No Package.resolved is committed yet: it cannot be generated on Windows (no Swift
-      # toolchain). The runner resolves it and we upload it below, so it can be committed
-      # afterwards and pinned from then on. See docs/DEPENDENCIES.md ("Version pinning").
-      - name: Resolve dependencies
-        run: |
-          xcodebuild -resolvePackageDependencies \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -clonedSourcePackagesDirPath .spm-cache
-          echo "--- resolved graph ---"
-          cat LCL.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved 2>/dev/null \
-            || echo "(no Package.resolved produced)"
-
-      - name: Upload Package.resolved
-        if: always()
-        uses: actions/upload-artifact@v4
+      - name: Cache DerivedData
+        uses: actions/cache@v4
         with:
-          name: package-resolved
-          path: LCL.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved
-          if-no-files-found: warn
-          retention-days: 14
+          path: dd
+          key: dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-
 
-      # Compile-only check. No signing: we have no certificates and do not need them to
-      # know whether the code is correct.
       # -skipPackagePluginValidation / -skipMacroValidation: SwiftPM build-tool plugins and
       # macros require an interactive trust prompt the first time. mlx-swift ships a
       # "CudaBuild" plugin and the graph pulls swift-syntax macros, so without these the
       # build stops at "Validate plug-in ..." and emits no error text at all.
       #
-      # 2>&1 before tee: xcodebuild writes these failures to stderr, so a bare `| tee`
-      # produces an empty diagnostics report — which is exactly how this bug hid itself.
-      - name: Build
-        run: |
-          set -o pipefail
-          xcodebuild build \
-            -project "$PROJECT" \
-            -scheme "$SCHEME" \
-            -destination 'generic/platform=iOS' \
-            -clonedSourcePackagesDirPath .spm-cache \
-            -resultBundlePath build.xcresult \
-            -skipPackagePluginValidation \
-            -skipMacroValidation \
-            CODE_SIGNING_ALLOWED=NO \
-            CODE_SIGNING_REQUIRED=NO \
-            CODE_SIGN_IDENTITY="" \
-            2>&1 | tee build.log
-
-      - name: Extract diagnostics
-        if: always()
-        run: bash scripts/ci-diagnostics.sh build.xcresult build.log > diagnostics.md
-
-      - name: Report
-        if: always()
-        run: cat diagnostics.md >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Upload diagnostics
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-diagnostics
-          path: |
-            diagnostics.md
-            build.log
-          retention-days: 14
-
-  test:
-    name: Test (iOS Simulator)
-    runs-on: macos-26
-    timeout-minutes: 45
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Select Xcode ${{ env.XCODE_VERSION }}
-        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
-
-      - name: Cache SPM
-        uses: actions/cache@v4
-        with:
-          path: .spm-cache
-          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
-          restore-keys: |
-            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
-
-      - name: List simulators
-        run: xcrun simctl list devices available | head -40
-
+      # 2>&1 before tee: xcodebuild writes those failures to stderr, so a bare `| tee`
+      # produces an empty diagnostics report — which is how that bug hid itself once.
       - name: Test
         run: |
           set -o pipefail
@@ -141,10 +87,12 @@ jobs:
             -project "$PROJECT" \
             -scheme "$SCHEME" \
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -derivedDataPath dd \
             -clonedSourcePackagesDirPath .spm-cache \
             -resultBundlePath test.xcresult \
             -skipPackagePluginValidation \
             -skipMacroValidation \
+            ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee test.log
 
       - name: Extract diagnostics
@@ -165,17 +113,14 @@ jobs:
             test.log
           retention-days: 14
 
-  # Produces an unsigned .ipa for sideloading (SideStore / AltStore / iLoader /
-  # LiveContainer). There is no paid Apple Developer account and no Mac, so this is the only
-  # way the app reaches a real device — and the device is where everything the design spec
-  # actually cares about gets verified.
+  # The developer's only route to a real device. Runs in parallel with `test` and depends on
+  # nothing, so a failing test never withholds an installable build.
   #
-  # The .ipa is unsigned on purpose: the sideloading tool re-signs it with the user's own
-  # certificate and applies the Increased Memory Limit entitlement from
-  # LCL/Resources/LCL.entitlements.
-  # No `needs:` and no branch filter, deliberately. This is the developer's only route to a
-  # real device, so it runs in parallel with build/test on every push rather than queueing
-  # behind them — and a failing simulator test must never withhold an installable build.
+  # Unsigned on purpose: the sideloading tool re-signs with the user's own certificate and
+  # applies Increased Memory Limit from LCL/Resources/LCL.entitlements. Without that
+  # entitlement a 6 GB iPhone will very likely Jetsam-kill the app on model load — see
+  # docs/RESEARCH_LOG.md §9, which also explains why a direct SideStore install is preferred
+  # over LiveContainer for this app.
   ipa:
     name: Unsigned IPA (sideload)
     runs-on: macos-26
@@ -190,9 +135,16 @@ jobs:
         uses: actions/cache@v4
         with:
           path: .spm-cache
-          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: spm-${{ env.XCODE_VERSION }}-
+
+      - name: Cache DerivedData
+        uses: actions/cache@v4
+        with:
+          path: dd
+          key: dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: |
-            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
+            dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-
 
       - name: Build for device (Release, unsigned)
         run: |
@@ -204,12 +156,21 @@ jobs:
             -sdk iphoneos \
             -derivedDataPath dd \
             -clonedSourcePackagesDirPath .spm-cache \
+            -resultBundlePath ipa.xcresult \
             -skipPackagePluginValidation \
             -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee ipa.log
+
+      - name: Extract diagnostics
+        if: always()
+        run: bash scripts/ci-diagnostics.sh ipa.xcresult ipa.log > diagnostics.md
+
+      - name: Report
+        if: always()
+        run: cat diagnostics.md >> "$GITHUB_STEP_SUMMARY"
 
       # An .ipa is just a zip with the .app inside a Payload/ directory.
       - name: Package .ipa
@@ -219,9 +180,13 @@ jobs:
           mkdir -p Payload
           cp -R "$APP" Payload/
           zip -qry "LCL-${GITHUB_SHA:0:7}-unsigned.ipa" Payload
-          ls -lh *.ipa
-          echo "### Sideload artifact" >> "$GITHUB_STEP_SUMMARY"
-          echo "\`LCL-${GITHUB_SHA:0:7}-unsigned.ipa\` — $(du -h *.ipa | cut -f1)" >> "$GITHUB_STEP_SUMMARY"
+          {
+            echo "### Sideload artifact"
+            echo "\`LCL-${GITHUB_SHA:0:7}-unsigned.ipa\` — $(du -h *.ipa | cut -f1)"
+            echo ""
+            echo "Install with SideStore/AltStore (preferred — supports Increased Memory Limit"
+            echo "and keeps the sandbox) or LiveContainer."
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload .ipa
         uses: actions/upload-artifact@v4
@@ -230,23 +195,12 @@ jobs:
           path: "*.ipa"
           retention-days: 30
 
-  warnings:
-    name: Warning gate
-    runs-on: macos-26
-    needs: build
-    timeout-minutes: 10
-    steps:
-      - uses: actions/checkout@v5
-      - name: Download diagnostics
-        uses: actions/download-artifact@v4
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
         with:
-          name: build-diagnostics
-      # "Do not accumulate broken code" (spec §80) — warnings are treated as debt
-      # and reported, but do not fail the build until the codebase is warning-clean.
-      - name: Summarise warnings
-        run: |
-          if grep -q "^## Warnings" diagnostics.md; then
-            echo "Warnings present — see build-diagnostics artifact." >> "$GITHUB_STEP_SUMMARY"
-          else
-            echo "No warnings." >> "$GITHUB_STEP_SUMMARY"
-          fi
+          name: ipa-diagnostics
+          path: |
+            diagnostics.md
+            ipa.log
+          retention-days: 14
