@@ -1,0 +1,44 @@
+# macOS / Xcode
+.DS_Store
+build/
+DerivedData/
+*.xcresult
+*.xcuserstate
+*.xcuserdatad/
+xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM
+
+# Swift Package Manager
+.build/
+.spm-cache/
+.swiftpm/
+# Package.resolved IS committed — CI must build the exact graph we intend.
+# See docs/DEPENDENCIES.md ("Version pinning").
+
+# CI artifacts
+build.log
+test.log
+diagnostics.md
+
+# Model weights — never in git. Multi-GB, downloaded at runtime.
+*.safetensors
+*.gguf
+*.mlmodelc
+Models/weights/
+
+# Secrets — must never be committed. Tokens live in Keychain on device.
+*.p8
+*.p12
+*.mobileprovision
+*.cer
+.env
+.env.*
+secrets.json
+
+# Windows
+Thumbs.db
+desktop.ini

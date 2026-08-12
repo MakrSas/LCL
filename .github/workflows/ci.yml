@@ -1,0 +1,160 @@
+name: CI
+
+# CI is our compiler. Development happens on Windows; this is the only macOS in the project.
+# Every job must produce output a human on Windows (and the agent) can read without Xcode.
+
+on:
+  push:
+    branches: [main, "ai/**", "dev/**"]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # Pinned deliberately. Never `macos-latest` — a silent image bump we cannot reproduce
+  # locally would be undebuggable from Windows.
+  # Xcode 26.6 = iOS 26 SDK. Xcode 27 image is still public preview and reportedly ships
+  # without the Metal toolchain (actions/runner-images#14450), which MLX needs.
+  XCODE_VERSION: "26.6"
+  SCHEME: LCL
+  PROJECT: LCL.xcodeproj
+
+jobs:
+  build:
+    name: Build (iOS)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: |
+          sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+          xcodebuild -version
+          echo "--- available SDKs ---"
+          xcodebuild -showsdks | grep -i ios || true
+
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: .spm-cache
+          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
+
+      - name: Resolve dependencies
+        run: |
+          xcodebuild -resolvePackageDependencies \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -clonedSourcePackagesDirPath .spm-cache \
+            -disableAutomaticPackageResolution
+
+      # Compile-only check. No signing: we have no certificates and do not need them to
+      # know whether the code is correct.
+      - name: Build
+        run: |
+          set -o pipefail
+          xcodebuild build \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'generic/platform=iOS' \
+            -clonedSourcePackagesDirPath .spm-cache \
+            -resultBundlePath build.xcresult \
+            CODE_SIGNING_ALLOWED=NO \
+            CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY="" \
+            | tee build.log
+
+      - name: Extract diagnostics
+        if: always()
+        run: bash scripts/ci-diagnostics.sh build.xcresult build.log > diagnostics.md
+
+      - name: Report
+        if: always()
+        run: cat diagnostics.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-diagnostics
+          path: |
+            diagnostics.md
+            build.log
+          retention-days: 14
+
+  test:
+    name: Test (iOS Simulator)
+    runs-on: macos-26
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Select Xcode ${{ env.XCODE_VERSION }}
+        run: sudo xcode-select -s "/Applications/Xcode_${XCODE_VERSION}.app"
+
+      - name: Cache SPM
+        uses: actions/cache@v4
+        with:
+          path: .spm-cache
+          key: spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          restore-keys: |
+            spm-${{ runner.os }}-${{ env.XCODE_VERSION }}-
+
+      - name: List simulators
+        run: xcrun simctl list devices available | head -40
+
+      - name: Test
+        run: |
+          set -o pipefail
+          xcodebuild test \
+            -project "$PROJECT" \
+            -scheme "$SCHEME" \
+            -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
+            -clonedSourcePackagesDirPath .spm-cache \
+            -resultBundlePath test.xcresult \
+            | tee test.log
+
+      - name: Extract diagnostics
+        if: always()
+        run: bash scripts/ci-diagnostics.sh test.xcresult test.log > diagnostics.md
+
+      - name: Report
+        if: always()
+        run: cat diagnostics.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload diagnostics
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-diagnostics
+          path: |
+            diagnostics.md
+            test.log
+          retention-days: 14
+
+  warnings:
+    name: Warning gate
+    runs-on: macos-26
+    needs: build
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v5
+      - name: Download diagnostics
+        uses: actions/download-artifact@v4
+        with:
+          name: build-diagnostics
+      # "Do not accumulate broken code" (spec §80) — warnings are treated as debt
+      # and reported, but do not fail the build until the codebase is warning-clean.
+      - name: Summarise warnings
+        run: |
+          if grep -q "^## Warnings" diagnostics.md; then
+            echo "Warnings present — see build-diagnostics artifact." >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No warnings." >> "$GITHUB_STEP_SUMMARY"
+          fi
