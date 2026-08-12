@@ -107,7 +107,21 @@ The most important screen in the app.
 
 ### Empty state
 
-Wordmark, one line, nothing else. No suggested-prompt grid — it makes an app feel like a demo.
+**Phase 1: genuinely empty.** No wordmark, no tagline, and not scrollable. Decoration in the one
+place the user is about to type is noise.
+
+**Later: suggested actions, not recent history.** The empty chat is where LCL proposes work it could
+take on — and the distinction that makes this good rather than demo-ish is *where the suggestions come
+from*:
+
+| | |
+|---|---|
+| ✅ **Derived from a real source** | "Diagnose the failing job in `MakrSas/LCL`" · "Continue the Model Manager task" · "Check this morning's CI". Each carries its source's icon and is actionable because the repo, task or schedule actually exists. |
+| ❌ **A generic prompt grid** | "Write a poem" · "Explain quantum physics". Invented filler that teaches the user nothing about what this app can do. |
+
+So a suggestion may only exist once its source does: connected repositories (Phase 5), scheduled tasks
+(Phase 6), project files (Phase 2), an unfinished AgentTask. With no sources connected there are no
+honest suggestions, and the empty state stays empty — same rule as everywhere else, no fake UI.
 
 ---
 
