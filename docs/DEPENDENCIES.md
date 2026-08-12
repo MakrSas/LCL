@@ -12,7 +12,7 @@ All versions verified 2026-08-12 — see [RESEARCH_LOG.md](RESEARCH_LOG.md).
 
 | Package | Coordinates | Products | License | Why |
 |---|---|---|---|---|
-| **mlx-swift-lm** | `github.com/ml-explore/mlx-swift-lm` `upToNextMajor(3.31.3)` | `MLXLLM`, `MLXLMCommon`, `MLXGuidedGeneration` | MIT | On-device inference. Gemma 4 text support landed 3.31.3. Grammar-constrained decoding is the basis of reliable tool calling. |
+| **mlx-swift-lm** | `github.com/ml-explore/mlx-swift-lm` `upToNextMajor(3.31.3)` → resolves **3.31.4** | `MLXLLM`, `MLXLMCommon`, `MLXEmbedders` | MIT | On-device inference. Gemma 4 text support landed 3.31.3. `MLXEmbedders` gives on-device embeddings for semantic retrieval with no second framework. |
 | **mlx-swift** | transitive (`~0.31.4`) | — | MIT | Metal array/NN framework under the above. Not pinned directly. |
 | **swift-transformers** | transitive | — | Apache-2.0 | Tokenizer + Hugging Face Hub download. Pulled in by mlx-swift-lm. |
 | **GRDB.swift** | `github.com/groue/GRDB.swift` `upToNextMajor(7.0.0)` | `GRDB` | MIT | SQLite with **FTS5 + BM25**. The reason we are not on SwiftData. |
@@ -37,7 +37,7 @@ file, then add `-disableAutomaticPackageResolution` to the resolve step in
 | Phase | Package | Coordinates | License | Why |
 |---|---|---|---|---|
 | 2 | `MLXVLM` | already in mlx-swift-lm | MIT | Vision. **Gated on Gemma 4 VLM support landing** — see risks. |
-| 2 | `MLXEmbedders` | already in mlx-swift-lm | MIT | On-device embeddings for semantic retrieval. No new dependency. |
+| 4 | `MLXGuidedGeneration` | mlx-swift-lm, **`main` only — not in 3.31.4** | MIT | Grammar-constrained tool calls. Blocked on a release; fallbacks in [RESEARCH_LOG.md](RESEARCH_LOG.md) §3. |
 | 3 | SwiftSoup | `github.com/scinfu/SwiftSoup` | MIT | HTML parsing for `WebPageReader`. Alternative: `WKWebView` + injected Readability.js — heavier, but handles JS-rendered pages. Decide with measurements in Phase 3. |
 | 4 | mcp-swift-sdk | `github.com/modelcontextprotocol/swift-sdk` `0.11.0` | MIT | Official MCP client. `HTTPClientTransport` (HTTP + SSE). **Remote servers only** — stdio is impossible on iOS. |
 | 5 | — | — | — | GitHub: plain `URLSession` against the REST API. No SDK. Octokit-style clients add surface without solving anything. |

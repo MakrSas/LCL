@@ -92,6 +92,13 @@ The central design decision. A 2.3B model *asked* for JSON will sometimes produc
 a 20-step agent task that is fatal. `MLXGuidedGeneration` (xgrammar) constrains sampling so
 **malformed tool calls are unrepresentable.**
 
+> ⚠️ **Not available in a pinned release yet.** `MLXGuidedGeneration` exists only on
+> `mlx-swift-lm`'s `main` branch, not in 3.31.4 ([RESEARCH_LOG.md](RESEARCH_LOG.md) §3). Tool calling
+> is Phase 4, so this is deferred, not blocked — but the fallback must be chosen deliberately when we
+> get there, and the fallback is strictly weaker: Gemma 4's native function calling plus host-side
+> validation and retry makes malformed calls *rare*, not *impossible*. Everything below describes the
+> target design.
+
 ### Two-phase turn
 
 **Phase A — route.** Constrain to a minimal grammar: open prose, or a tool envelope whose `name` is

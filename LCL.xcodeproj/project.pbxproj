@@ -21,7 +21,7 @@
 /* Begin PBXBuildFile section */
 		F10000000000000000000020 /* MLXLLM in Frameworks */ = {isa = PBXBuildFile; productRef = F1000000000000000000001C /* MLXLLM */; };
 		F10000000000000000000021 /* MLXLMCommon in Frameworks */ = {isa = PBXBuildFile; productRef = F1000000000000000000001D /* MLXLMCommon */; };
-		F10000000000000000000022 /* MLXGuidedGeneration in Frameworks */ = {isa = PBXBuildFile; productRef = F1000000000000000000001E /* MLXGuidedGeneration */; };
+		F10000000000000000000022 /* MLXEmbedders in Frameworks */ = {isa = PBXBuildFile; productRef = F1000000000000000000001E /* MLXEmbedders */; };
 		F10000000000000000000023 /* GRDB in Frameworks */ = {isa = PBXBuildFile; productRef = F1000000000000000000001F /* GRDB */; };
 /* End PBXBuildFile section */
 
@@ -68,7 +68,7 @@
 			files = (
 				F10000000000000000000020 /* MLXLLM in Frameworks */,
 				F10000000000000000000021 /* MLXLMCommon in Frameworks */,
-				F10000000000000000000022 /* MLXGuidedGeneration in Frameworks */,
+				F10000000000000000000022 /* MLXEmbedders in Frameworks */,
 				F10000000000000000000023 /* GRDB in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -123,7 +123,7 @@
 			packageProductDependencies = (
 				F1000000000000000000001C /* MLXLLM */,
 				F1000000000000000000001D /* MLXLMCommon */,
-				F1000000000000000000001E /* MLXGuidedGeneration */,
+				F1000000000000000000001E /* MLXEmbedders */,
 				F1000000000000000000001F /* GRDB */,
 			);
 			productName = LCL;
@@ -444,10 +444,10 @@
 			package = F1000000000000000000001A /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
 			productName = MLXLMCommon;
 		};
-		F1000000000000000000001E /* MLXGuidedGeneration */ = {
+		F1000000000000000000001E /* MLXEmbedders */ = {
 			isa = XCSwiftPackageProductDependency;
 			package = F1000000000000000000001A /* XCRemoteSwiftPackageReference "mlx-swift-lm" */;
-			productName = MLXGuidedGeneration;
+			productName = MLXEmbedders;
 		};
 		F1000000000000000000001F /* GRDB */ = {
 			isa = XCSwiftPackageProductDependency;

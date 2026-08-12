@@ -77,14 +77,35 @@ The broken variants (31B `KVCacheSimple` crash, MoE tensor keys, `gemma4_assista
 > Stale issue: [mlx-swift#389](https://github.com/ml-explore/mlx-swift/issues/389) ("gemma4 not
 > registered", 2026-04-05) was filed on the wrong repo one day *before* support landed downstream.
 
-### `MLXGuidedGeneration` — the decision that makes this project work
+### `MLXGuidedGeneration` — real, but NOT in a release yet
 
-Grammar-constrained ("guided") generation built on **vendored xgrammar C++ via CXGrammar**.
-Standalone: depends only on CXGrammar + MLXLMCommon + MLX. Constrains output to a **JSON Schema or
-EBNF** grammar. `verified`
+> **Corrected 2026-08-13 by CI.** The build failed with
+> `Missing package product 'MLXGuidedGeneration'`. The product list above was read from
+> `Package.swift` on **`main`**; the tagged **3.31.4** release does not declare it.
 
-This is how a 2.3B model becomes a reliable tool-caller: tool calls are **guaranteed parseable by
-construction**, not by asking the model nicely. See `MODEL_INTEGRATION.md`.
+Products actually in **3.31.4**: `MLXLLM`, `MLXVLM`, `MLXLMCommon`, `MLXEmbedders`,
+`MLXHuggingFace` (+ `BenchmarkHelpers`, `IntegrationTestHelpers`).
+`MLXGuidedGeneration` and `MLXFoundationModels` are **unreleased — `main` only.**
+— [Package.swift @ 3.31.4](https://raw.githubusercontent.com/ml-explore/mlx-swift-lm/3.31.4/Package.swift) `verified`
+
+What it is, when it lands: grammar-constrained ("guided") generation on **vendored xgrammar C++ via
+CXGrammar**, constraining output to a **JSON Schema or EBNF**. Standalone — depends only on
+CXGrammar + MLXLMCommon + MLX.
+
+The architectural bet in `MODEL_INTEGRATION.md` §4 still stands — a 2.3B model needs tool calls that
+are parseable *by construction*. But it is **not available in a pinned release today**, and tool
+calling is Phase 4, so the decision is deferred rather than blocked. Options at that point, in
+preference order:
+
+1. A release that includes it (it is on `main`, so likely).
+2. Pin `mlx-swift-lm` to a revision — acceptable only if the graph is otherwise stable.
+3. [`petrukha-ivan/mlx-swift-structured`](https://github.com/petrukha-ivan/mlx-swift-structured) —
+   third-party xgrammar wrapper.
+4. Gemma 4's **native** function calling plus 3.31.4's *"JSON tool-call detection and parser
+   hardening for mixed text/tool outputs"*, with host-side validation and retry. Weaker: it makes
+   malformed calls rare rather than impossible.
+
+**Lesson recorded:** read `Package.swift` at the tag we pin, never at `main`.
 
 Also: `ChatSession` gained a `tools` parameter; 3.31.4 added *"JSON tool-call detection and parser
 hardening for mixed text/tool outputs"* and *"Structured ChatSession continuation"*. `verified`
