@@ -70,6 +70,13 @@ jobs:
 
       # Compile-only check. No signing: we have no certificates and do not need them to
       # know whether the code is correct.
+      # -skipPackagePluginValidation / -skipMacroValidation: SwiftPM build-tool plugins and
+      # macros require an interactive trust prompt the first time. mlx-swift ships a
+      # "CudaBuild" plugin and the graph pulls swift-syntax macros, so without these the
+      # build stops at "Validate plug-in ..." and emits no error text at all.
+      #
+      # 2>&1 before tee: xcodebuild writes these failures to stderr, so a bare `| tee`
+      # produces an empty diagnostics report — which is exactly how this bug hid itself.
       - name: Build
         run: |
           set -o pipefail
@@ -79,10 +86,12 @@ jobs:
             -destination 'generic/platform=iOS' \
             -clonedSourcePackagesDirPath .spm-cache \
             -resultBundlePath build.xcresult \
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
-            | tee build.log
+            2>&1 | tee build.log
 
       - name: Extract diagnostics
         if: always()
@@ -132,7 +141,9 @@ jobs:
             -destination 'platform=iOS Simulator,name=iPhone 17 Pro,OS=latest' \
             -clonedSourcePackagesDirPath .spm-cache \
             -resultBundlePath test.xcresult \
-            | tee test.log
+            -skipPackagePluginValidation \
+            -skipMacroValidation \
+            2>&1 | tee test.log
 
       - name: Extract diagnostics
         if: always()

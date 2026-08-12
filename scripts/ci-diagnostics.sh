@@ -110,18 +110,40 @@ fi
 # Fallback / supplement: scrape the raw log. Always useful for link errors and
 # toolchain failures, which do not always land in the result bundle.
 # ---------------------------------------------------------------------------
+FOUND_ANY=0
+
 if [ -n "$RAW_LOG" ] && [ -f "$RAW_LOG" ]; then
   LOG_ERRORS="$(grep -E "(error:|fatal error:|ld: error|clang: error|Command .* failed)" "$RAW_LOG" \
                  | sed 's/^[[:space:]]*//' | sort -u | head -60 || true)"
+  [ -n "$LOG_ERRORS" ] && FOUND_ANY=1
   emit_section "Log errors" "$LOG_ERRORS"
 
-  FAILED_TESTS="$(grep -E "^Test Case .* failed|XCTAssert.* failed" "$RAW_LOG" \
+  # Plugin/macro trust failures print no "error:" line and go to stderr, so they are
+  # invisible to the pattern above. They cost us a full CI round-trip once; never again.
+  TRUST="$(grep -iE "(Validate plug-in|validate macro|untrusted|not trusted|requires .*approval|disable this validation|skipPackagePluginValidation|skipMacroValidation)" \
+             "$RAW_LOG" | sed 's/^[[:space:]]*//' | sort -u | head -20 || true)"
+  [ -n "$TRUST" ] && FOUND_ANY=1
+  emit_section "Plugin / macro validation" "$TRUST"
+
+  MISSING="$(grep -iE "(does not contain a scheme|Unable to find a destination|no such module|cannot find .* in scope|Could not resolve|unsupported|Signing for)" \
+               "$RAW_LOG" | sed 's/^[[:space:]]*//' | sort -u | head -20 || true)"
+  [ -n "$MISSING" ] && FOUND_ANY=1
+  emit_section "Configuration problems" "$MISSING"
+
+  FAILED_TESTS="$(grep -E "^Test Case .* failed|XCTAssert.* failed|failed - " "$RAW_LOG" \
                    | sed 's/^[[:space:]]*//' | sort -u | head -40 || true)"
+  [ -n "$FAILED_TESTS" ] && FOUND_ANY=1
   emit_section "Failed tests" "$FAILED_TESTS"
 
-  TAIL="$(grep -E "(BUILD FAILED|BUILD SUCCEEDED|TEST FAILED|TEST SUCCEEDED|Testing failed)" "$RAW_LOG" \
-           | tail -5 || true)"
-  emit_section "Outcome" "$TAIL"
+  OUTCOME="$(grep -E "(BUILD FAILED|BUILD SUCCEEDED|TEST FAILED|TEST SUCCEEDED|Testing failed|TEST EXECUTE FAILED)" \
+               "$RAW_LOG" | tail -5 || true)"
+  emit_section "Outcome" "$OUTCOME"
+
+  # Last resort. An empty diagnostics report is useless to someone on Windows with no
+  # Xcode — if we matched nothing, show where the log actually stopped.
+  if [ "$FOUND_ANY" -eq 0 ]; then
+    emit_section "No diagnostics matched — last 30 log lines" "$(tail -30 "$RAW_LOG")"
+  fi
 fi
 
 exit 0
