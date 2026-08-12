@@ -45,10 +45,15 @@ env:
   CACHE_VERSION: v1
 
 jobs:
-  # Fast feedback plus the only automated verification of the agent loop's invariants.
+  # Manual only, by the developer's decision: the simulator test job took 11+ minutes against
+  # 78 seconds for the device build, and on a one-person project that cost more than it
+  # returned. The tests themselves are kept and still work — run this job from the Actions tab
+  # ("Run workflow") when a change touches the agent loop, the markdown parser, or anything
+  # else whose failure would be silent rather than visible on screen.
   test:
     name: Test (iOS Simulator)
     runs-on: macos-26
+    if: github.event_name == 'workflow_dispatch'
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5
@@ -65,12 +70,18 @@ jobs:
           key: spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: spm-${{ env.XCODE_VERSION }}-
 
-      - name: Cache DerivedData
-        uses: actions/cache@v4
+      # Split restore/save instead of actions/cache, because that only writes the cache when
+      # the job SUCCEEDS. During active development failures are the normal case, so the
+      # simulator cache never got written and this job was cold on every run — 11+ minutes
+      # against 78 seconds for the device build, whose cache had been saved once.
+      # Saving on failure too is what makes a red run cheap.
+      - name: Restore DerivedData
+        uses: actions/cache/restore@v4
         with:
           path: dd
-          key: dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-
           restore-keys: |
+            dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-
             dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-
 
       # -skipPackagePluginValidation / -skipMacroValidation: SwiftPM build-tool plugins and
@@ -94,6 +105,15 @@ jobs:
             -skipMacroValidation \
             ONLY_ACTIVE_ARCH=YES \
             2>&1 | tee test.log
+
+      # Unique key per run, matched by the restore-keys prefix above: cache/save refuses to
+      # overwrite an existing key.
+      - name: Save DerivedData
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: dd
+          key: dd-${{ env.CACHE_VERSION }}-sim-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-${{ github.run_id }}
 
       - name: Extract diagnostics
         if: always()
@@ -140,12 +160,13 @@ jobs:
           key: spm-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
           restore-keys: spm-${{ env.XCODE_VERSION }}-
 
-      - name: Cache DerivedData
-        uses: actions/cache@v4
+      - name: Restore DerivedData
+        uses: actions/cache/restore@v4
         with:
           path: dd
-          key: dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}
+          key: dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-
           restore-keys: |
+            dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-
             dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-
 
       - name: Build for device (Release, unsigned)
@@ -165,6 +186,13 @@ jobs:
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGN_IDENTITY="" \
             2>&1 | tee ipa.log
+
+      - name: Save DerivedData
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: dd
+          key: dd-${{ env.CACHE_VERSION }}-dev-${{ env.XCODE_VERSION }}-${{ hashFiles('**/Package.resolved') }}-${{ github.run_id }}
 
       - name: Extract diagnostics
         if: always()
