@@ -12,7 +12,9 @@ on:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  # Never cancel on main: doing so once threw away a finished .ipa because a docs commit
+  # landed while it was packaging. On main the artifact is the point of the run.
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 env:
   # Pinned deliberately. Never `macos-latest` — a silent image bump we cannot reproduce
@@ -171,11 +173,12 @@ jobs:
   # The .ipa is unsigned on purpose: the sideloading tool re-signs it with the user's own
   # certificate and applies the Increased Memory Limit entitlement from
   # LCL/Resources/LCL.entitlements.
+  # No `needs:` and no branch filter, deliberately. This is the developer's only route to a
+  # real device, so it runs in parallel with build/test on every push rather than queueing
+  # behind them — and a failing simulator test must never withhold an installable build.
   ipa:
     name: Unsigned IPA (sideload)
     runs-on: macos-26
-    needs: build
-    if: github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v5

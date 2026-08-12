@@ -75,7 +75,7 @@ problem to solve — the pipeline is designed for it.
 |---|---|
 | Xcode project | Hand-authored `LCL.xcodeproj` using `PBXFileSystemSynchronizedRootGroup` folder references. **Adding a `.swift` file requires no project edit.** |
 | Compiler | GitHub Actions `macos-26`, Xcode 26.6. Free for this public repo. |
-| Tests | `xcodebuild test` on an iOS 26 simulator in CI. |
+| Tests | `xcodebuild test` on an iOS 26 simulator in CI. **The only automated verification that exists** — with no Mac, this is what keeps the agent loop's invariants (permission gates, branch policy, checkpoint restore, compaction) checkable at all. Installing a build and using it cannot catch a silently broken invariant. |
 | Diagnostics | `-resultBundlePath` + `xcresulttool` → compact JSON of errors, so failures are readable from Windows and parseable by the agent. |
 | Formatting | `swift-format` in CI (ships with Xcode). Advisory, not blocking. |
 | Device install | **Sideloading** — unsigned `.ipa` from CI, installed with SideStore / AltStore / iLoader / LiveContainer. No paid Apple Developer Program needed. Requires the **Increased Memory Limit** entitlement, which AltStore 2.2+ and SideStore support for sideloaded apps (see [RESEARCH_LOG.md](RESEARCH_LOG.md) §9 for the free-vs-paid-certificate caveat). TestFlight stays the option if entitlements turn out to be blocked. |

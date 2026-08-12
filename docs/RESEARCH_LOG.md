@@ -216,6 +216,31 @@ Confirmed by the developer 2026-08-13: the only test device is an **iPhone 15** 
 - ⚠️ **Caveat:** reports indicate the entitlement may require a **paid** certificate registered on the
   device rather than a free one. Unresolved — **must be tested empirically on the actual phone.** `unverified`
 
+### Install route: SideStore direct is preferable to LiveContainer *for this app*
+
+The developer's stated plan is LiveContainer. It will very likely work, but two properties make a plain
+SideStore/AltStore install the better default for LCL specifically:
+
+- **Guest apps do not inherit LiveContainer's entitlements.** Increased Memory Limit must be applied to
+  the guest's App ID from inside LiveContainer using `GetMoreRam`
+  ([Discussion #388](https://github.com/LiveContainer/LiveContainer/discussions/388)), and there are
+  reported failures doing exactly that —
+  [issue #429 "Failed to activate and acquire memory lock increment"](https://github.com/LiveContainer/LiveContainer/issues/429).
+  AltStore 2.2+/SideStore support the entitlement directly on a normal install. `verified`
+- **Guest apps lack normal sandboxing, so data isolation is limited.** LCL stores a GitHub PAT in the
+  Keychain and its security model (`ARCHITECTURE.md` §7) assumes ordinary app isolation. Running under
+  a weakened sandbox alongside other guests undercuts an assumption we otherwise enforce carefully.
+  `likely`
+
+**Metal is not a concern.** LiveContainer loads the guest in-process on iOS, so the GPU is the real
+device GPU. (Searches surface "Metal/MLX cannot run in containers" — that concerns Docker and Linux VMs
+on Apple Silicon and does not apply here.) Not empirically confirmed for MLX under LiveContainer.
+`unverified`
+
+**Recommendation:** install directly via SideStore/AltStore with the entitlement; keep LiveContainer as
+the fallback if the 3-app limit becomes the binding problem. Either way the memory entitlement must be
+confirmed working on the phone before trusting any load figures.
+
 ### Why this changes the architecture
 
 Gemma 4 E2B 4-bit weights are ~2–3 GB, and PLE means static weights exceed what "2.3B effective"
