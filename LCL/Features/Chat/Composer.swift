@@ -36,17 +36,25 @@ struct Composer: View {
                 // circles: only `.glass` / `.glassProminent` stretch under the finger and
                 // throw a highlight, and a painted background cannot imitate that.
                 HStack(spacing: Space.tight) {
-                    if supportsThinking {
-                        // A Toggle, not a Button: this is a binary state, and
-                        // `.toggleStyle(.button)` is the platform's own way to express one as
-                        // a control. It renders the on/off state and reports the right
-                        // accessibility traits without us styling either.
-                        Toggle("Thinking", isOn: $thinkingEnabled)
-                            .toggleStyle(.button)
-                            .buttonStyle(.glass)
-                            .buttonBorderShape(.capsule)
-                            .haptic(.toggle, trigger: thinkingEnabled)
+                    // Options live behind `+` rather than as pills along the composer.
+                    //
+                    // A plain `Menu` with a `Toggle` inside: the system draws the checkmark,
+                    // the material and the presentation, and reports the right accessibility
+                    // traits. Camera, Photos, Files and Plugins join this menu when those
+                    // features exist — today it holds the one option that is real.
+                    Menu {
+                        if supportsThinking {
+                            Toggle(isOn: $thinkingEnabled) {
+                                Label("Thinking", systemImage: "sparkles")
+                            }
+                        }
+                    } label: {
+                        Image(systemName: "plus")
                     }
+                    .buttonStyle(.glass)
+                    .buttonBorderShape(.circle)
+                    .haptic(.menuOpened, trigger: thinkingEnabled)
+                    .accessibilityLabel("Options")
 
                     Spacer(minLength: 0)
 

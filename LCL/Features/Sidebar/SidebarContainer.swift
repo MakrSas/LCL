@@ -38,25 +38,38 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             let progress = progress(width: width)
 
             ZStack(alignment: .leading) {
-                // Static. Never offset, never scaled — see the note above.
-                content
-                    .disabled(isOpen)
-
-                if progress > 0 {
-                    Color.black
-                        .opacity(0.45 * progress)
-                        .ignoresSafeArea()
-                        .onTapGesture { setOpen(false) }
-                        .gesture(drag(width: width))
-                        .accessibilityLabel("Close sidebar")
-                        .accessibilityAddTraits(.isButton)
-                }
-
+                // The sidebar sits UNDERNEATH, revealed as the chat slides off it.
                 sidebar
                     .frame(width: width)
                     .background(Palette.canvasRaised, ignoresSafeAreaEdges: .vertical)
-                    .offset(x: -width * (1 - progress))
+                    // Slight parallax so it reads as depth rather than a sheet sliding in.
+                    .offset(x: reduceMotion ? 0 : -width * 0.18 * (1 - progress))
+                    .opacity(reduceMotion ? (progress > 0.5 ? 1 : 0) : progress)
                     .accessibilityHidden(progress < 0.9)
+
+                content
+                    .disabled(isOpen)
+                    .overlay {
+                        if progress > 0 {
+                            Color.black
+                                .opacity(0.35 * progress)
+                                .ignoresSafeArea()
+                                .onTapGesture { setOpen(false) }
+                                .gesture(drag(width: width))
+                                .accessibilityLabel("Close sidebar")
+                                .accessibilityAddTraits(.isButton)
+                        }
+                    }
+                    // Offset and a corner radius, but no scale and no shadow. Those two were
+                    // the expensive parts: a shadow re-rasterises the whole surface each
+                    // frame, and scaling resamples the entire subtree.
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: Radius.sidebarPeel * progress,
+                            style: .continuous
+                        )
+                    )
+                    .offset(x: width * progress)
             }
             .overlay(alignment: .leading) {
                 // Edge grab strip, only when closed. Keeping the gesture off the transcript
@@ -99,13 +112,23 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                 // Velocity-aware: a fast flick wins over distance travelled.
                 let predicted = (isOpen ? width : 0) + value.predictedEndTranslation.width
                 let shouldOpen = predicted > width * 0.5
-                dragTranslation = 0
-                setOpen(shouldOpen)
+
+                // THE BUG, fixed: these two must change inside ONE animation block.
+                // Resetting dragTranslation outside it snapped `progress` back to its base
+                // instantly, and only then did the spring run — which read as the animation
+                // playing a second time after releasing the finger. Together they interpolate
+                // once, continuously, from wherever the finger left off.
+                withAnimation(MotionSystem.resolved(MotionSystem.sidebar, reduceMotion: reduceMotion)) {
+                    dragTranslation = 0
+                    isOpen = shouldOpen
+                }
+                latch.reset(isPast: shouldOpen)
             }
     }
 
     private func setOpen(_ open: Bool) {
         withAnimation(MotionSystem.resolved(MotionSystem.sidebar, reduceMotion: reduceMotion)) {
+            dragTranslation = 0
             isOpen = open
         }
         latch.reset(isPast: open)
