@@ -44,6 +44,7 @@ struct ChatView: View {
                         scrollToBottomButton(scroller)
                     }
                 }
+                .lclAnimation(MotionSystem.standard, value: isNearBottom)
         }
     }
 
@@ -121,7 +122,8 @@ struct ChatView: View {
         }
         .padding(.trailing, Layout.gutter)
         .padding(.bottom, Space.tight)
-        .transition(.opacity)
+        // Scales up from the corner it will act on, so the control's origin is legible.
+        .transition(.scale(scale: 0.8, anchor: .bottomTrailing).combined(with: .opacity))
         .accessibilityLabel("Scroll to latest")
     }
 

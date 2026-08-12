@@ -68,6 +68,9 @@ struct Composer: View {
                         Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
                             .font(.system(size: 15, weight: .semibold))
                             .foregroundStyle(sendForeground)
+                            // The arrow morphs into the stop square in place, rather than
+                            // one glyph snapping out and another in.
+                            .contentTransition(.symbolEffect(.replace))
                             .frame(width: 34, height: 34)
                             .background(sendBackground, in: Circle())
                     }
@@ -83,6 +86,10 @@ struct Composer: View {
         }
         .lclAnimation(MotionSystem.standard, value: isStreaming)
         .lclAnimation(MotionSystem.standard, value: canSend)
+        .lclAnimation(MotionSystem.standard, value: thinkingEnabled)
+        // Height only actually changes at line boundaries, so keying on the text animates
+        // the growth without animating every keystroke.
+        .lclAnimation(MotionSystem.standard, value: text)
     }
 
     private var sendBackground: Color {

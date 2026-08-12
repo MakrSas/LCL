@@ -14,10 +14,9 @@ struct SidebarView: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: Space.loose) {
-                    section("Library") {
-                        row("Library", systemImage: "books.vertical")
-                    }
-
+                    // Library, Projects, Plugins, Activity, Scheduled, GitHub and Images all
+                    // arrive with their phases. A row leading to an empty screen is worse
+                    // than no row.
                     if !recentTitles.isEmpty {
                         section("Recent") {
                             ForEach(recentTitles, id: \.self) { title in

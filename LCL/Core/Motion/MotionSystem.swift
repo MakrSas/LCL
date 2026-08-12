@@ -29,6 +29,49 @@ extension View {
     func lclAnimation<V: Equatable>(_ animation: Animation, value: V) -> some View {
         modifier(ResolvedAnimation(animation: animation, value: value))
     }
+
+    /// Fades and rises into place **once**, on first appearance.
+    ///
+    /// Opacity plus a 6pt rise, no scale: scaling text on arrival reads as a web animation
+    /// (docs/DESIGN_SYSTEM.md §6). Deliberately once-only — during streaming the trailing
+    /// block re-renders constantly, and anything driven by content would re-animate on every
+    /// token.
+    func appearOnce(delay: Double = 0) -> some View {
+        modifier(AppearOnce(delay: delay))
+    }
+}
+
+private struct ResolvedAnimation<V: Equatable>: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let animation: Animation
+    let value: V
+
+    func body(content: Content) -> some View {
+        content.animation(MotionSystem.resolved(animation, reduceMotion: reduceMotion), value: value)
+    }
+}
+
+private struct AppearOnce: ViewModifier {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var shown = false
+    let delay: Double
+
+    func body(content: Content) -> some View {
+        content
+            .opacity(shown ? 1 : 0)
+            // Under Reduce Motion the movement goes and the cross-fade stays: still, not
+            // broken.
+            .offset(y: shown || reduceMotion ? 0 : 6)
+            .onAppear {
+                guard !shown else { return }
+                withAnimation(
+                    MotionSystem.resolved(MotionSystem.standard, reduceMotion: reduceMotion)
+                        .delay(delay)
+                ) {
+                    shown = true
+                }
+            }
+    }
 }
 
 private struct ResolvedAnimation<V: Equatable>: ViewModifier {

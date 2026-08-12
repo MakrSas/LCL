@@ -242,7 +242,20 @@ struct MarkdownView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: Space.tight + 2) {
             ForEach(blocks) { block in
-                switch block {
+                blockView(block)
+                    // Each block fades in once, when it first appears. Because block ids are
+                    // stable, a block already on screen never re-animates as the stream
+                    // grows — and the text inside is never animated per token, which would
+                    // look cheap and cost a layout pass each time.
+                    .appearOnce()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func blockView(_ block: MarkdownBlock) -> some View {
+        Group {
+            switch block {
                 case .paragraph(_, let text):
                     Text(text)
                         .assistantProse()
@@ -299,7 +312,6 @@ struct MarkdownView: View {
                         .frame(height: 0.5)
                         .padding(.vertical, Space.tight)
                 }
-            }
         }
     }
 

@@ -7,14 +7,18 @@ struct MessageView: View {
 
     @State private var showThinking = false
     @State private var copyTrigger = 0
+    @State private var copied = false
 
     var body: some View {
-        switch message.role {
-        case .user:
-            userMessage
-        case .assistant:
-            assistantMessage
+        Group {
+            switch message.role {
+            case .user:
+                userMessage
+            case .assistant:
+                assistantMessage
+            }
         }
+        .appearOnce()
     }
 
     // MARK: User
@@ -68,8 +72,11 @@ struct MessageView: View {
                 showThinking.toggle()
             } label: {
                 HStack(spacing: Space.hair) {
-                    Image(systemName: showThinking ? "chevron.down" : "chevron.right")
+                    // Rotation rather than a glyph swap: the chevron is the same object
+                    // turning, which is what the system does everywhere else.
+                    Image(systemName: "chevron.right")
                         .font(.caption2)
+                        .rotationEffect(.degrees(showThinking ? 90 : 0))
                     Text("Thinking")
                         .font(.subheadline)
                 }
@@ -85,8 +92,12 @@ struct MessageView: View {
                     .foregroundStyle(Palette.thinking)
                     .textSelection(.enabled)
                     .padding(.leading, Space.base)
+                    // Grows from the top edge rather than fading in place, so the reveal
+                    // reads as the panel opening.
+                    .transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+        .clipped()
         .lclAnimation(MotionSystem.standard, value: showThinking)
     }
 
@@ -96,11 +107,21 @@ struct MessageView: View {
         HStack(spacing: Space.base) {
             Button {
                 onCopy()
+                copied = true
                 copyTrigger += 1
+                // Confirmation is transient: the checkmark says "done" and then gets out of
+                // the way, rather than leaving the row in a changed state.
+                Task {
+                    try? await Task.sleep(for: .seconds(1.6))
+                    copied = false
+                }
             } label: {
-                Image(systemName: "doc.on.doc")
+                Image(systemName: copied ? "checkmark" : "doc.on.doc")
+                    // The glyph morphs instead of snapping — the system's own idiom for a
+                    // symbol changing meaning in place.
+                    .contentTransition(.symbolEffect(.replace))
             }
-            .accessibilityLabel("Copy")
+            .accessibilityLabel(copied ? "Copied" : "Copy")
 
             Button {
                 onRegenerate()
@@ -118,30 +139,20 @@ struct MessageView: View {
         .buttonStyle(.quiet)
         .padding(.top, Space.hair)
         .haptic(.selection, trigger: copyTrigger)
+        .appearOnce()
     }
 }
 
 /// Shown only in the gap between sending and the first token, so the app never looks frozen.
+///
+/// A system symbol effect rather than three hand-animated circles: it is one line, it matches
+/// the platform's own waiting idiom, and it honours Reduce Motion without us handling that.
 struct TypingIndicator: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var phase = 0
-
     var body: some View {
-        HStack(spacing: Space.hair + 1) {
-            ForEach(0..<3, id: \.self) { index in
-                Circle()
-                    .fill(Palette.textTertiary)
-                    .frame(width: 6, height: 6)
-                    .opacity(reduceMotion ? 0.6 : (phase == index ? 1 : 0.35))
-            }
-        }
-        .accessibilityLabel("Generating a response")
-        .task {
-            guard !reduceMotion else { return }
-            while !Task.isCancelled {
-                try? await Task.sleep(for: .milliseconds(320))
-                phase = (phase + 1) % 3
-            }
-        }
+        Image(systemName: "ellipsis")
+            .font(.title3)
+            .foregroundStyle(Palette.textTertiary)
+            .symbolEffect(.variableColor.iterative.dimInactiveLayers)
+            .accessibilityLabel("Generating a response")
     }
 }

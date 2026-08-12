@@ -37,7 +37,9 @@ actor MockModelProvider: ModelProvider {
 
     var isLoaded: Bool { loaded }
 
-    nonisolated init(
+    // No `nonisolated` here: an actor's synchronous init is already nonisolated, and saying
+    // so explicitly is an error.
+    init(
         script: [String] = MockModelProvider.defaultScript,
         thinking: String? = "Considering how to answer this clearly.",
         tokenDelay: Duration = .milliseconds(18)
