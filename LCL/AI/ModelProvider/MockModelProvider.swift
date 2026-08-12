@@ -8,7 +8,10 @@ import Foundation
 /// no GPU and no 2.5 GB of weights. On a machine with no Mac that is the difference between
 /// testable and not.
 actor MockModelProvider: ModelProvider {
-    let descriptor = ModelDescriptor(
+    // `nonisolated` on the synchronous requirements: `ModelProvider` exposes these without
+    // `async` so a view can read capabilities during layout. They are immutable `let`s of
+    // Sendable type, so reading them off the actor is safe.
+    nonisolated let descriptor = ModelDescriptor(
         id: "mock",
         displayName: "Mock",
         developer: "LCL",
@@ -17,7 +20,7 @@ actor MockModelProvider: ModelProvider {
         downloadBytes: 0
     )
 
-    let capabilities = ModelCapabilities(
+    nonisolated let capabilities = ModelCapabilities(
         maxContextTokens: 32_768,
         supportsVision: false,
         supportsAudioInput: false,
@@ -28,13 +31,13 @@ actor MockModelProvider: ModelProvider {
     )
 
     private var loaded = false
-    private let script: [String]
-    private let thinkingScript: String?
-    private let tokenDelay: Duration
+    nonisolated private let script: [String]
+    nonisolated private let thinkingScript: String?
+    nonisolated private let tokenDelay: Duration
 
     var isLoaded: Bool { loaded }
 
-    init(
+    nonisolated init(
         script: [String] = MockModelProvider.defaultScript,
         thinking: String? = "Considering how to answer this clearly.",
         tokenDelay: Duration = .milliseconds(18)
@@ -62,7 +65,7 @@ actor MockModelProvider: ModelProvider {
         max(1, text.count / 4)
     }
 
-    func stream(_ request: GenerationRequest) -> AsyncThrowingStream<GenerationEvent, Error> {
+    nonisolated func stream(_ request: GenerationRequest) -> AsyncThrowingStream<GenerationEvent, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 let started = ContinuousClock.now

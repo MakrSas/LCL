@@ -104,6 +104,13 @@ enum GenerationEvent: Sendable {
 
 // MARK: - Provider
 
+/// Implementations are typically actors, because inference must never touch the main actor.
+///
+/// Note for any such implementation: `descriptor`, `capabilities` and `stream` are
+/// deliberately **synchronous** so a view can read capabilities during layout and start a
+/// stream without an `await`. An actor must therefore declare those three `nonisolated`,
+/// backing them with immutable `let`s. Without that, conformance fails with
+/// "crosses into actor-isolated code".
 protocol ModelProvider: Sendable {
     var descriptor: ModelDescriptor { get }
     var capabilities: ModelCapabilities { get }
