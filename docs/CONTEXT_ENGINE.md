@@ -185,6 +185,82 @@ hundred (spec §58).
 
 ---
 
+## 5a. The memory index — put the map in context, not the territory
+
+Memory lives in the store, never in the prompt. What the prompt gets is a **compact manifest of what
+exists**, and the model reads only the entries it decides it needs.
+
+```
+Memory · showing 8 of 312 (recall by id · search_memory for the rest)
+
+  mem:proj/a1   pref    prefers GRDB over SwiftData             ·   2d
+  fact:c4       dec     chose native SwiftUI markdown renderer  ·   5d
+  fact:e9       finding sliding-window layers cap KV growth     ·   1d
+  doc:spec#12   file    LCL spec §12 Web              1.2k tok  ·   1d
+  tool:9a3e     build   Actions run 314 — failed      8.4k tok  ·   1h
+  task:7f       task    Model Manager — waiting for user        ·   3h
+  msg:41c2      msg     user described iPhone 15 constraint     ·  20m
+  brief:2b      research MLX KV cache options         3.1k tok  ·  40m
+```
+
+That manifest costs a few hundred tokens. The referenced content behind it is hundreds of thousands.
+
+### Why this shape, specifically for a 2.3B model
+
+A small model is **bad at composing search queries** and bad at knowing when it should search. Pure
+agentic retrieval — "call `search_memory` when you feel you're missing something" — quietly fails on a
+model this size, because the failure mode is not a bad query, it is *never realising one was needed*.
+
+Choosing an id from a visible list is a far easier cognitive task than inventing a query. So the index
+converts retrieval from **recall** into **recognition**, which is the difference between a capability a
+2.3B model has and one it does not.
+
+### Addressing
+
+Every stored item has a stable, citable id. Ids appear in the manifest, in tool results, in plans and
+in the Activity log, so anything the model or the user has ever seen can be re-read exactly.
+
+| Prefix | Contents |
+|---|---|
+| `msg:` | a raw message, never mutated |
+| `fact:` | one typed compaction output, with its `source_event_id` |
+| `mem:chat/` `mem:proj/` `mem:global/` | user-visible memories by scope |
+| `tool:` | a full tool result payload |
+| `doc:name#n` | a file chunk |
+| `brief:` | a research brief |
+| `task:` `plan:` `dec:` | agent state |
+
+### Reading
+
+```
+recall(id, focus: String?)          → one item; `focus` returns only relevant spans of a large one
+recall_many([id])                   → several small items in one call
+search_memory(query, scope, limit)  → hybrid search when no id is known (§4)
+remember(content, scope)            → write a memory
+```
+
+`recall` is **progressive**: a large item returns its summary plus a section list first, and a second
+`recall` with `focus` drills into a section. An 8.4k-token build log costs ~150 tokens to look at and
+~600 to read the part that matters — instead of 8.4k to have it dumped in unread.
+
+### Keeping the manifest honest
+
+The manifest is ranked against the current goal and step, then truncated. **Truncation is always
+stated** — `showing 8 of 312` — because a silently capped list reads as "this is everything", which
+would teach the model that nothing else exists. Same principle as everywhere else in LCL: no silent
+caps.
+
+Protected items (current plan, decisions, pinned) are never *only* in the manifest — they are in
+context in full. Reading them must never be optional.
+
+### One store, three consumers
+
+The same store and the same ids back the model's `recall`, the user's Memory screen, and the Context
+Inspector. There is no separate "AI memory" the user cannot inspect — which is what makes
+`Preview What Model Sees` trustworthy rather than a reconstruction.
+
+---
+
 ## 6. Memory
 
 Three scopes, all user-visible and user-editable (spec §56): **chat**, **project**, **global**
