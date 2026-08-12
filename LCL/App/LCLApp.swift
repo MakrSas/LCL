@@ -2,15 +2,14 @@ import SwiftUI
 
 /// LCL — LoCaL.
 ///
-/// Step 0 of Phase 1: the app exists and builds. Nothing more is claimed here.
-/// See docs/PHASE_1_PLAN.md — the DesignSystem lands before any real screen, so this
-/// root deliberately contains no chrome, no cards, and no placeholder controls
-/// (docs/PRODUCT_SPEC.md: "no fake UI").
+/// Phase 1 (docs/PHASE_1_PLAN.md): DesignSystem, interactive sidebar, chat, floating
+/// composer and streaming, running on `MockModelProvider`. Gemma 4 E2B lands in Step 7
+/// behind the same `ModelProvider` protocol, with no view changing.
 @main
 struct LCLApp: App {
     var body: some Scene {
         WindowGroup {
-            RootView()
+            AppRoot()
         }
     }
 }

@@ -1,8 +1,8 @@
 import XCTest
 @testable import LCL
 
-/// Step 0 gate (docs/PHASE_1_PLAN.md): the app builds, the dependency graph links, and the
-/// two facts the architecture rests on are true on a real iOS runtime.
+/// Step 0 gate (docs/PHASE_1_PLAN.md): the dependency graph links and the two facts the
+/// architecture rests on are true on a real iOS runtime.
 final class FoundationTests: XCTestCase {
 
     func testGRDBRoundTrips() throws {
@@ -10,8 +10,8 @@ final class FoundationTests: XCTestCase {
     }
 
     /// FTS5 is why we chose GRDB over SwiftData. If system SQLite on iOS lacks it, the
-    /// ContextEngine retrieval design changes — so this is a load-bearing assertion, not
-    /// a smoke test.
+    /// ContextEngine retrieval design changes — so this is a load-bearing assertion, not a
+    /// smoke test.
     func testFTS5IsAvailableOnIOS() throws {
         XCTAssertTrue(
             try DatabaseProbe.fts5IsAvailable(),
@@ -21,9 +21,5 @@ final class FoundationTests: XCTestCase {
 
     func testMLXGraphLinks() {
         XCTAssertTrue(InferenceLinkProbe.linked)
-    }
-
-    func testRootViewInstantiates() {
-        _ = RootView()
     }
 }
