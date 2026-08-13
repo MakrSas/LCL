@@ -74,6 +74,34 @@ appearances.
 
 **Done:** round-trip tests; FTS search returns ranked results; migration from empty runs clean.
 
+### `ChatViewModel` integration seam (pre-verified, code TBD)
+
+Reviewed 2026-08-13 to save a research round-trip once the exact GRDB schema lands. `ChatViewModel`
+today (`LCL/Features/Chat/ChatViewModel.swift`) holds `messages: [ChatMessage]` purely in memory —
+five concrete points need to change, and nowhere else does:
+
+1. **`init`** needs a `chatID` and a persistence dependency, and should load that chat's existing
+   messages instead of always starting empty.
+2. **`send()`** persists the user message immediately after appending it in memory (so it survives
+   a kill before the assistant even responds), and persists the assistant message's row once
+   created (empty, `isStreaming: true`) so a chat interrupted mid-stream still has a placeholder to
+   resume into.
+3. **`flush()` must NOT persist on every call.** It already runs on a ~16ms display timer
+   (`docs/ARCHITECTURE.md` §11) — writing to SQLite at that rate would be pure waste. The database
+   only needs the *final* text.
+4. **`finishStreaming()`** is therefore the real persistence point: one write of the completed
+   text, thinking, and `TokenUsage` once a turn actually finishes (including on `stop()`, which
+   already routes through `finishStreaming()` — a stopped generation still persists whatever
+   arrived).
+5. **`clear()`** currently wipes the in-memory array, which matches spec §80 for a mock model with
+   nothing to lose — but is wrong the moment persistence exists. "New Chat" must *start a new chat
+   row* and switch the active `chatID`, never delete history the app promised never to destroy
+   (`docs/CONTEXT_ENGINE.md` §1). `AppRoot`'s `onNewChat: { viewModel.clear() }` needs to become
+   "create chat, switch to it" for the same reason.
+
+None of `send`/`stop`/`regenerate`/`flush`'s *streaming* logic needs to change — persistence is
+additive at specific points, not a rewrite of the flow.
+
 ---
 
 ## Step 3 — App shell + Sidebar
