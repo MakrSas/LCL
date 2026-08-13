@@ -24,6 +24,10 @@ final class ChatStoreTests: XCTestCase {
     func testNewestChatSortsFirst() async throws {
         let store = try makeStore()
         let older = try await store.createChat(title: "Older")
+        // `createChat` timestamps with `Date()`; without a real gap the two rows can tie at
+        // whatever precision the column actually stores, and `ORDER BY updatedAt DESC` gives
+        // no guarantee about tie order.
+        try await Task.sleep(for: .seconds(1))
         let newer = try await store.createChat(title: "Newer")
 
         let chats = try await store.listChats()

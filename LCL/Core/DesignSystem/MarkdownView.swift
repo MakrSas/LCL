@@ -144,6 +144,16 @@ struct MarkdownParser {
                 continue
             }
 
+            // Bullet, numbered, and quote all share one shape: a run of same-prefixed lines,
+            // possibly still growing if the source simply ended mid-item. The inner scan can't
+            // tell "an item is still being typed" apart from "the list is genuinely done" by
+            // itself — `cursor == lines.count` means the scan ran out of lines to look at, not
+            // that the last item is finished. Committing unconditionally here (as this used to)
+            // freezes that last item's text the instant a character lands on it, and — because
+            // `index`/`settledLineIndex` advance past it too — the line is never re-examined
+            // even once the rest of it streams in; the next newline starts a brand-new second
+            // list instead of extending this one. Deferring via `pendingBlockID` exactly like
+            // the fence and paragraph branches above fixes this the same way.
             if Self.isBullet(trimmed) {
                 var items: [AttributedString] = []
                 var cursor = index
@@ -153,10 +163,20 @@ struct MarkdownParser {
                     items.append(Self.inline(String(candidate.dropFirst(2))))
                     cursor += 1
                 }
-                newlySettled.append(.bulletList(id: nextBlockID, items: items))
-                nextBlockID += 1
-                index = cursor
-                newlySettledIndex = index
+                let id = nextID()
+                let block = MarkdownBlock.bulletList(id: id, items: items)
+                if cursor < lines.count {
+                    newlySettled.append(block)
+                    index = cursor
+                    newlySettledIndex = index
+                } else {
+                    pendingBlockID = id
+                    result.append(contentsOf: newlySettled)
+                    result.append(block)
+                    settled.append(contentsOf: newlySettled)
+                    settledLineIndex = newlySettledIndex
+                    return result
+                }
                 continue
             }
 
@@ -169,10 +189,20 @@ struct MarkdownParser {
                     items.append(Self.inline(dropped))
                     cursor += 1
                 }
-                newlySettled.append(.numberedList(id: nextBlockID, items: items))
-                nextBlockID += 1
-                index = cursor
-                newlySettledIndex = index
+                let id = nextID()
+                let block = MarkdownBlock.numberedList(id: id, items: items)
+                if cursor < lines.count {
+                    newlySettled.append(block)
+                    index = cursor
+                    newlySettledIndex = index
+                } else {
+                    pendingBlockID = id
+                    result.append(contentsOf: newlySettled)
+                    result.append(block)
+                    settled.append(contentsOf: newlySettled)
+                    settledLineIndex = newlySettledIndex
+                    return result
+                }
                 continue
             }
 
@@ -185,10 +215,20 @@ struct MarkdownParser {
                     parts.append(String(candidate.dropFirst(2)))
                     cursor += 1
                 }
-                newlySettled.append(.quote(id: nextBlockID, text: Self.inline(parts.joined(separator: " "))))
-                nextBlockID += 1
-                index = cursor
-                newlySettledIndex = index
+                let id = nextID()
+                let block = MarkdownBlock.quote(id: id, text: Self.inline(parts.joined(separator: " ")))
+                if cursor < lines.count {
+                    newlySettled.append(block)
+                    index = cursor
+                    newlySettledIndex = index
+                } else {
+                    pendingBlockID = id
+                    result.append(contentsOf: newlySettled)
+                    result.append(block)
+                    settled.append(contentsOf: newlySettled)
+                    settledLineIndex = newlySettledIndex
+                    return result
+                }
                 continue
             }
 
