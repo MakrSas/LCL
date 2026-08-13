@@ -6,13 +6,21 @@ import SwiftUI
 /// `NavigationSplitView` collapses to a stack on iPhone and gives no drag-to-reveal drawer,
 /// so this is a custom container (docs/PRODUCT_SPEC.md §6).
 ///
-/// Deliberately plain: offset, a small constant corner radius, and a dim — nothing else. Every
-/// OTHER decorative addition tried here produced a visible defect or cost real frames:
-///   • parallax left a black gap between the drawer and the content
-///   • a *large* corner radius (screen-bezel size, or the old 36pt "peel") clipped straight
-///     through the toolbar/composer controls sitting at the reveal edge — see
+/// The content genuinely narrows as the drawer opens — not a fixed-width view sliding mostly
+/// off-screen. That distinction is what lets its trailing edge round to match the reveal edge,
+/// rather than showing the flat, unrounded *middle* of an oversized rectangle (see the `.frame`
+/// call in `body`). It is a real width change, not a `.scaleEffect` — `.scaleEffect` is cheaper
+/// but visually squashes everything inside (icons go elliptical, text compresses), which reads
+/// as broken in a way an actual reflow doesn't.
+///
+/// Two things tried here were real defects, not stylistic misses, and stayed removed:
+///   • parallax on a *static* drawer left a black gap between it and the content
+///   • a *large* reveal-edge corner radius (screen-bezel size, or the old 36pt "peel") clips
+///     straight through the toolbar/composer controls sitting at that edge — see
 ///     `Radius.sidebarReveal` for why bigger is worse here, not better
-///   • scale and shadow forced the whole subtree to re-rasterise each frame
+///
+/// Shadow was also dropped (forces the whole surface to re-rasterise every frame) and hasn't
+/// been reconsidered since the width change landed.
 struct SidebarContainer<Sidebar: View, Content: View>: View {
     @Binding var isOpen: Bool
     @ViewBuilder var sidebar: Sidebar
@@ -104,6 +112,16 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                             .accessibilityLabel("Close sidebar")
                             .accessibilityAddTraits(.isButton)
                     }
+                    // Shrinks as the drawer opens, rather than staying full width and sliding
+                    // mostly off-screen. That distinction is the whole fix here: with a fixed
+                    // full width, content's TRUE trailing edge — the one with rounded corners —
+                    // moves off-screen the moment it's offset, and what's left visible at the
+                    // screen's true right edge is just the flat *middle* of the rectangle, which
+                    // was never a corner and can't be rounded. Narrowing the frame keeps both
+                    // the leading (reveal) and trailing (true screen) edges genuinely within
+                    // content's own bounds at all times, so clipShape rounds both, matching the
+                    // two-sided "floating card" reference rather than a curl on one side only.
+                    .frame(width: proxy.size.width - width * progress)
                     // Small and constant — see Radius.sidebarReveal for why a literal
                     // screen-corner radius clips straight through the toolbar/composer
                     // controls that sit at this exact edge.
