@@ -13,6 +13,13 @@ struct ChatView: View {
     var body: some View {
         ScrollViewReader { scroller in
             transcript
+                // A plain SwiftUI bar, not a `.toolbar { }` / `NavigationStack` one — see
+                // `topBar`'s doc comment for why. Same `.safeAreaInset` mechanism as the
+                // composer below, which has never had a positioning complaint; the system
+                // toolbar, rendered inside the sidebar's offset/clip/mask machinery, did.
+                .safeAreaInset(edge: .top, spacing: 0) {
+                    topBar
+                }
                 .safeAreaInset(edge: .bottom, spacing: 0) {
                     // safeAreaInset rather than an overlay: this way the transcript's own
                     // insets stay correct, so content can scroll clear of the composer and
@@ -31,10 +38,6 @@ struct ChatView: View {
                 // ignoresSafeArea: a plain background stops at the safe area, which left a
                 // lighter band under the status bar and above the home indicator.
                 .background(Palette.canvas.ignoresSafeArea())
-                .toolbar { toolbarContent }
-                // Both are needed. Hiding the background alone still left a hairline under
-                // the bar — that divider is the scroll edge effect, not the material.
-                .toolbarBackgroundVisibility(.hidden, for: .navigationBar)
                 .scrollEdgeEffectStyle(.soft, for: .top)
                 .onChange(of: viewModel.messages.last?.blocks.count) { _, _ in
                     // Only follow the stream if the user is already at the bottom. Yanking
@@ -113,20 +116,35 @@ struct ChatView: View {
         .accessibilityLabel("Scroll to latest")
     }
 
-    @ToolbarContentBuilder
-    private var toolbarContent: some ToolbarContent {
-        ToolbarItem(placement: .topBarLeading) {
-            // No button style here. Toolbar items already get the system glass treatment on
-            // this OS; adding `.glass` on top produced a circle inside a circle.
+    /// Deliberately not a system `.toolbar { }` inside a `NavigationStack`. That combination
+    /// proved unreliable specifically when rendered through the sidebar's offset/clip/mask
+    /// machinery: the toolbar stopped self-inseting under the status bar once its ancestor
+    /// went full-bleed, and no amount of explicit safe-area padding on the surrounding views
+    /// fixed it — the toolbar's own internal layout was still doing something opaque. A plain
+    /// `HStack` positioned via `.safeAreaInset(edge: .top)` (the exact mechanism already
+    /// proven correct for the composer below) sidesteps that uncertainty entirely: ordinary
+    /// SwiftUI layout, fully within our own control.
+    ///
+    /// Title sits right next to the button rather than centred across the full screen width.
+    /// True centring would place it outside the narrow sliver the sidebar reveals — centring
+    /// is only meaningful against the *visible* width, which this view has no way to know.
+    private var topBar: some View {
+        HStack(spacing: Space.tight + 2) {
             Button(action: onOpenSidebar) {
                 Image(systemName: "sidebar.left")
             }
+            .buttonStyle(.glass)
+            .buttonBorderShape(.circle)
             .accessibilityLabel("Open sidebar")
-        }
-        ToolbarItem(placement: .principal) {
+
             Text("LCL")
                 .font(.headline)
+
+            Spacer(minLength: 0)
         }
+        .padding(.horizontal, Layout.gutter)
+        .padding(.vertical, Space.tight)
+        .background(Palette.canvas)
     }
 
     private func send() {

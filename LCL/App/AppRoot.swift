@@ -22,10 +22,11 @@ struct AppRoot: View {
                 onClose: { setSidebar(open: false) }
             )
         } content: {
-            NavigationStack {
-                ChatView(viewModel: viewModel) {
-                    setSidebar(open: true)
-                }
+            // No NavigationStack: Phase 1 has no push destinations, and its system toolbar
+            // proved unreliable inside the sidebar's offset/clip/mask machinery (see
+            // ChatView.topBar). Add it back once a real destination exists to push to.
+            ChatView(viewModel: viewModel) {
+                setSidebar(open: true)
             }
         }
         .background(Palette.canvas.ignoresSafeArea())
