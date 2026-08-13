@@ -41,14 +41,37 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
     private let edgeGrabWidth: CGFloat = 28
 
     var body: some View {
+        // .ignoresSafeArea() on the reader itself, not just on children. Without it,
+        // GeometryReader reports the safe-area-inset size (shorter than the true screen), while
+        // content's own .ignoresSafeArea() tries to bleed to the real edges independently of
+        // that smaller frame. The offset/clipShape here operate in the READER's coordinate
+        // space, so the top/bottom strips inside the safe-area inset ended up outside that
+        // space entirely — static, unclipped, never sliding with the rest of the screen. This
+        // is what produced the gaps and the flat (non-rounded) edge once fully open: those
+        // strips were never part of the animated geometry to begin with.
         GeometryReader { proxy in
             let width = Layout.sidebarWidth(for: proxy.size.width)
             let progress = progress(width: width)
+            // `proxy.safeAreaInsets` still reports the true device insets even though the
+            // reader itself ignores them for layout — this is the standard way to get a
+            // full-bleed frame while still knowing where the notch/home-indicator are, so a
+            // plain view (unlike NavigationStack's own toolbar, which insets itself
+            // automatically) can be told explicitly to stay clear of them.
+            let insets = proxy.safeAreaInsets
 
             ZStack(alignment: .leading) {
                 // Underneath, and static: no parallax, so there is never a gap between it and
                 // the content for the container's black base to show through.
+                //
+                // Padding first, background after: `sidebar` (a plain VStack, not a
+                // NavigationStack with its own toolbar) needs to be told explicitly to stay
+                // clear of the status bar / home indicator now that its ancestor is full-bleed.
+                // The background is applied to the already-padded view with
+                // `ignoresSafeAreaEdges: .vertical`, so the grey fill still reaches the true
+                // top and bottom edges — only the rows/buttons inside stay inset.
                 sidebar
+                    .padding(.top, insets.top)
+                    .padding(.bottom, insets.bottom)
                     .frame(width: width)
                     .background(Palette.canvasRaised, ignoresSafeAreaEdges: .vertical)
                     .accessibilityHidden(progress < 0.9)
@@ -102,6 +125,7 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             }
             .haptic(.sidebarThreshold, trigger: latch.crossings)
         }
+        .ignoresSafeArea()
     }
 
     // MARK: - Geometry
