@@ -185,9 +185,10 @@ proves it. Fixed, with regression tests for each; full suite (47 tests) now runs
 9-minute timeout before.
 
 **Done:** unit tests for incremental parsing (append a token → only the last block changes) ✅.
-Performance test appending 4000 tokens stays within budget — not yet written; the bugs above were
-found by hand-tracing and CI's pass/fail signal, not by a timed benchmark, so this remains a real
-gap against Step 4's original done-criteria.
+Performance test appending 4000 tokens stays within budget ✅ (`testAppendingFourThousandTokensStaysFast`)
+— a coarse smoke test against a generous wall-clock bound, not a tight regression guard (the bugs
+above were all found by hand-tracing and CI's pass/fail signal, not by timing); the specific
+bug-shaped tests are what actually protect the incremental guarantee going forward.
 
 ---
 

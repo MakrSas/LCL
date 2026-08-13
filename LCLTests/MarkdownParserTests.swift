@@ -142,4 +142,37 @@ final class MarkdownParserTests: XCTestCase {
         let replaced = parser.blocks(for: "Different.")
         XCTAssertEqual(replaced.count, 1)
     }
+
+    /// docs/PHASE_1_PLAN.md Step 4's stated done-criterion: appending 4000 tokens stays fast.
+    /// Re-parsing the whole document on every token — the exact bug this renderer exists to
+    /// avoid (top of file) — would still likely finish this within the generous bound below at
+    /// this scale, so this is a coarse smoke test, not a tight regression guard; the specific
+    /// bug-shaped tests above are what actually protect the incremental guarantee. Its real
+    /// job is enforcing that Step 4's documented promise has *a* test behind it, and that a
+    /// truly catastrophic regression (a hang, or something like it) fails loudly here too.
+    func testAppendingFourThousandTokensStaysFast() {
+        var parser = MarkdownParser()
+        var buffer = ""
+        let start = Date()
+
+        for index in 0..<4000 {
+            switch index % 40 {
+            case 0:
+                buffer += "\n\n## Section \(index)\n\n"
+            case 1...5:
+                buffer += "- item \(index) with a few words of text\n"
+            case 6:
+                buffer += "\n"
+            default:
+                buffer += "word\(index) "
+            }
+            _ = parser.blocks(for: buffer)
+        }
+
+        let elapsed = Date().timeIntervalSince(start)
+        XCTAssertLessThan(
+            elapsed, 3.0,
+            "4000 tokens took \(elapsed)s — suggests the parser stopped re-parsing only the trailing block"
+        )
+    }
 }
