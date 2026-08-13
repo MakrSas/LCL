@@ -267,14 +267,23 @@ struct MarkdownView: View {
                         .fontWeight(.semibold)
                         .padding(.top, Space.tight)
                         .textSelection(.enabled)
+                        // Lets VoiceOver's heading rotor jump straight to this block, matching
+                        // what it visually already is.
+                        .accessibilityAddTraits(.isHeader)
 
                 case .bulletList(_, let items):
                     VStack(alignment: .leading, spacing: Space.hair + 2) {
                         ForEach(Array(items.enumerated()), id: \.offset) { _, item in
                             HStack(alignment: .firstTextBaseline, spacing: Space.tight) {
-                                Text("•").foregroundStyle(Palette.textTertiary)
+                                // Hidden from accessibility: purely decorative, and reading
+                                // order already conveys "this is a list item" without it.
+                                Text("•")
+                                    .foregroundStyle(Palette.textTertiary)
+                                    .accessibilityHidden(true)
                                 Text(item).textSelection(.enabled)
                             }
+                            // One VoiceOver stop per item instead of two ("•", then the text).
+                            .accessibilityElement(children: .combine)
                         }
                     }
                     .font(.body)
@@ -288,6 +297,9 @@ struct MarkdownView: View {
                                     .foregroundStyle(Palette.textTertiary)
                                 Text(item).textSelection(.enabled)
                             }
+                            // Unlike the bullet, the numeral is real information (position),
+                            // so it stays audible — just combined into one stop per item.
+                            .accessibilityElement(children: .combine)
                         }
                     }
                     .font(.body)

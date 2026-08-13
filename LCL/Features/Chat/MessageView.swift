@@ -83,6 +83,10 @@ struct MessageView: View {
                 .foregroundStyle(Palette.thinking)
             }
             .buttonStyle(.plain)
+            // Every other button in the transcript gets this via `.quiet`; this one uses
+            // `.plain` specifically to keep its own text colour, so it needs the 44pt minimum
+            // added back explicitly rather than inherited.
+            .minimumHitTarget()
             .haptic(.reasoningDetent, trigger: showThinking)
             .accessibilityLabel(showThinking ? "Hide reasoning" : "Show reasoning")
 

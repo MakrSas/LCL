@@ -103,7 +103,10 @@ struct SidebarView: View {
                 .lineLimit(1)
             Spacer(minLength: 0)
         }
-        .frame(minHeight: 40)
+        // 44pt minimum even though nothing here is tappable yet — recent chats have no
+        // switching action until persistence lands (Step 2), but the row is getting one soon
+        // and 40pt would be under the HIG tap-target minimum the moment it does.
+        .frame(minHeight: 44)
         .contentShape(Rectangle())
     }
 }
