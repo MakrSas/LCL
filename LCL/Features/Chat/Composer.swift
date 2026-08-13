@@ -17,6 +17,11 @@ struct Composer: View {
     @FocusState private var isFocused: Bool
     @State private var sendTrigger = 0
 
+    /// The animation space the glass controls morph within. Every participant needs a unique
+    /// `glassEffectID` in this namespace, and they must share one `GlassEffectContainer` —
+    /// which `GlassCluster` provides.
+    @Namespace private var glassNamespace
+
     private var canSend: Bool {
         !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
@@ -27,7 +32,10 @@ struct Composer: View {
             // recreate the TextField at the exact moment it gains focus — losing that focus and
             // collapsing it straight back. This is compact when idle and taller as you type,
             // with the controls staying at the bottom.
-            HStack(alignment: .bottom, spacing: Space.tight) {
+            // `.center`, not `.bottom`. Bottom-aligning left the buttons sitting below the
+            // text's optical centre in the common single-line case, which is what reads as
+            // "not centred".
+            HStack(alignment: .center, spacing: Space.tight) {
                 // Options live behind `+` rather than as pills along the composer.
                 //
                 // A plain `Menu` with a `Toggle` inside: the system draws the checkmark, the
@@ -45,6 +53,7 @@ struct Composer: View {
                 }
                 .buttonStyle(.glass)
                 .buttonBorderShape(.circle)
+                .glassEffectID("composer.options", in: glassNamespace)
                 .haptic(.menuOpened, trigger: thinkingEnabled)
                 .accessibilityLabel("Options")
 
@@ -54,27 +63,35 @@ struct Composer: View {
                     .font(.body)
                     .focused($isFocused)
                     .submitLabel(.return)
-                    .padding(.vertical, Space.tight)
+                    // No vertical padding here — the container provides it. Padding on the
+                    // field itself offset its centre from the buttons'.
 
-                // Same position and size in both states: the control must not move under the
-                // user's thumb when generation starts.
-                Button {
-                    if isStreaming {
-                        onStop()
-                    } else if canSend {
-                        sendTrigger += 1
-                        onSend()
+                // Exists only when it can actually do something. A permanently disabled
+                // button parked in the composer is worse design than one that arrives when it
+                // becomes usable — and appearing is exactly what the glass morph system is
+                // for, so it grows out of the composer's glass instead of fading in.
+                //
+                // Streaming keeps it present as Stop, in the same position, so the control
+                // never moves under the user's thumb mid-generation.
+                if canSend || isStreaming {
+                    Button {
+                        if isStreaming {
+                            onStop()
+                        } else {
+                            sendTrigger += 1
+                            onSend()
+                        }
+                    } label: {
+                        Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
+                            // The arrow morphs into the stop square in place.
+                            .contentTransition(.symbolEffect(.replace))
                     }
-                } label: {
-                    Image(systemName: isStreaming ? "stop.fill" : "arrow.up")
-                        // The arrow morphs into the stop square in place.
-                        .contentTransition(.symbolEffect(.replace))
+                    .buttonStyle(.glassProminent)
+                    .buttonBorderShape(.circle)
+                    .glassEffectID("composer.send", in: glassNamespace)
+                    .haptic(.messageSent, trigger: sendTrigger)
+                    .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
                 }
-                .buttonStyle(.glassProminent)
-                .buttonBorderShape(.circle)
-                .disabled(!isStreaming && !canSend)
-                .haptic(.messageSent, trigger: sendTrigger)
-                .accessibilityLabel(isStreaming ? "Stop generating" : "Send message")
             }
             .padding(.horizontal, Space.tight + 2)
             .padding(.vertical, Space.tight)
