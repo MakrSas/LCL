@@ -70,14 +70,18 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
         // strips were never part of the animated geometry to begin with.
         GeometryReader { proxy in
             let width = Layout.sidebarWidth(for: proxy.size.width)
-            let progress = progress(width: width)
+            let progress = SidebarGeometry.progress(isOpen: isOpen, dragTranslation: dragTranslation, width: width)
             // `proxy.safeAreaInsets` still reports the true device insets even though the
             // reader itself ignores them for layout — this is the standard way to get a
             // full-bleed frame while still knowing where the notch/home-indicator are, so a
             // plain view (unlike NavigationStack's own toolbar, which insets itself
             // automatically) can be told explicitly to stay clear of them.
             let insets = proxy.safeAreaInsets
-            let narrowedWidth = proxy.size.width - width * progress
+            let narrowedWidth = SidebarGeometry.narrowedWidth(
+                screenWidth: proxy.size.width,
+                sidebarWidth: width,
+                progress: progress
+            )
 
             ZStack(alignment: .leading) {
                 // Underneath, and static: no parallax, so there is never a gap between it and
@@ -175,13 +179,6 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
         .ignoresSafeArea()
     }
 
-    // MARK: - Geometry
-
-    private func progress(width: CGFloat) -> CGFloat {
-        let base = isOpen ? width : 0
-        return min(max((base + dragTranslation) / width, 0), 1)
-    }
-
     // MARK: - Gesture
 
     private func drag(width: CGFloat) -> some Gesture {
@@ -197,7 +194,8 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                 // per event dropped updates mid-drag and the offset jumped when they resumed.
                 guard isHorizontalDrag == true else { return }
                 dragTranslation = value.translation.width - translationBaseline
-                latch.update(isPast: progress(width: width) > 0.5)
+                let liveProgress = SidebarGeometry.progress(isOpen: isOpen, dragTranslation: dragTranslation, width: width)
+                latch.update(isPast: liveProgress > 0.5)
             }
             .onEnded { value in
                 let wasHorizontal = isHorizontalDrag == true
@@ -210,14 +208,14 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                     return
                 }
 
-                // Velocity-aware: a fast flick wins over distance travelled.
-                // `predictedEndTranslation` shares the same touch-down origin as `translation`,
-                // so it needs the identical baseline correction — otherwise this decision is
-                // off by a constant from what was actually on screen, which matters for short
-                // fast flicks near the threshold.
-                let predicted = (isOpen ? width : 0)
-                    + (value.predictedEndTranslation.width - translationBaseline)
-                let shouldOpen = predicted > width * 0.5
+                // Velocity-aware: a fast flick wins over distance travelled. See
+                // `SidebarGeometry.shouldOpen` for why the baseline correction matters here too.
+                let shouldOpen = SidebarGeometry.shouldOpen(
+                    isOpen: isOpen,
+                    predictedEndTranslation: value.predictedEndTranslation.width,
+                    translationBaseline: translationBaseline,
+                    width: width
+                )
 
                 // Both inside ONE animation block. Resetting the translation outside it snapped
                 // `progress` back instantly and only then ran the spring, which read as the
@@ -247,7 +245,11 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
 /// only a narrower slice of it should be visibly rounded. `Shape.path(in:)` receives the
 /// containing view's rect regardless — this type deliberately ignores its offered `width` and
 /// substitutes its own, using only `rect.height` and `rect.minY`.
-private struct RevealClip: Shape {
+///
+/// Not `private`: `SidebarGeometryTests` constructs it directly to assert it actually ignores
+/// the offered rect's width, which is the entire point of the type and the exact thing a typo
+/// here would silently break.
+struct RevealClip: Shape {
     let width: CGFloat
     let leadingRadius: CGFloat
     let trailingRadius: CGFloat
