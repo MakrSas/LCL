@@ -80,7 +80,13 @@ struct MarkdownParser {
             let line = lines[index]
             let trimmed = line.trimmingCharacters(in: .whitespaces)
 
+            // A blank line only proves the PREVIOUS content is done once something else
+            // follows it — if it's currently the last line, it might still be typed into real
+            // content (this is exactly how a call ends up back here with a now-non-blank
+            // `line`). `break` leaves `settledLineIndex` at wherever it already was, so the
+            // next call re-examines this same position instead of having skipped past it.
             if trimmed.isEmpty {
+                guard index + 1 < lines.count else { break }
                 index += 1
                 newlySettledIndex = index
                 continue
@@ -124,19 +130,41 @@ struct MarkdownParser {
                 continue
             }
 
+            // A heading is one line, but "one line" isn't the same as "finished" — while it's
+            // still the last line in the buffer, more characters could still land on it
+            // ("# H" becoming "# Heading"). Committing on first match (as this used to) froze
+            // the text at whatever it was that instant and — because `index` advanced past the
+            // line too — it was never looked at again even once the rest streamed in. Deferred
+            // via `pendingBlockID` exactly like the multi-line branches below, so the text
+            // keeps updating under one stable id until a following line proves it's done.
             if trimmed.hasPrefix("#") {
                 let hashes = trimmed.prefix { $0 == "#" }.count
                 if hashes <= 6, trimmed.dropFirst(hashes).hasPrefix(" ") {
                     let text = String(trimmed.dropFirst(hashes + 1))
-                    newlySettled.append(.heading(id: nextBlockID, level: hashes, text: Self.inline(text)))
-                    nextBlockID += 1
-                    index += 1
-                    newlySettledIndex = index
+                    let id = nextID()
+                    let heading = MarkdownBlock.heading(id: id, level: hashes, text: Self.inline(text))
+                    if index + 1 < lines.count {
+                        newlySettled.append(heading)
+                        index += 1
+                        newlySettledIndex = index
+                    } else {
+                        pendingBlockID = id
+                        result.append(contentsOf: newlySettled)
+                        result.append(heading)
+                        settled.append(contentsOf: newlySettled)
+                        settledLineIndex = newlySettledIndex
+                        return result
+                    }
                     continue
                 }
             }
 
+            // Same reasoning as the blank-line check above: "---" exactly matched right now
+            // doesn't rule out "----" a character later. A divider has no partial rendering
+            // worth showing, so — unlike headings — this just waits rather than deferring a
+            // block via `pendingBlockID`.
             if trimmed == "---" || trimmed == "***" || trimmed == "___" {
+                guard index + 1 < lines.count else { break }
                 newlySettled.append(.divider(id: nextBlockID))
                 nextBlockID += 1
                 index += 1
