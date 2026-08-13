@@ -81,8 +81,12 @@ Two Gemma-specific facts we must respect:
 - Gemma historically has **no system role**; system instructions are folded into the first user turn.
   mlx-swift-lm 3.31.4 includes a *"Fix Gemma 4 system message and modality order"* change, so the
   correct handling is version-dependent and **must be confirmed empirically**, not assumed.
-- Thinking output is delimited by the model's own reasoning markers, parsed here and emitted as
-  `.thinking` events — never mixed into `.prose`. The Chat UI receives two clean streams.
+- Thinking is off unless the system instruction we assemble includes the `<|think|>` control token;
+  when on, a turn's raw text carries reasoning inline as `<|channel>thought...\n<channel|>response`.
+  `Gemma4Provider` scans each `.chunk` for that marker pair and splits it into `GenerationEvent
+  .thinking` / `.prose` itself — `mlx-swift-lm`'s `Generation` enum has no separate case for it.
+  Token strings sourced from Google's chat-template docs, not yet confirmed against real device
+  output — `likely`, not `verified` (`docs/RESEARCH_LOG.md` §12).
 
 ---
 

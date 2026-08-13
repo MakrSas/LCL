@@ -201,11 +201,24 @@ agent loop stays verifiable in later phases without a device.
 
 ## Step 7 — Gemma4Provider
 
-- `MLXLLM` + `MLXGuidedGeneration` linked and building for iOS in CI.
+- `MLXLLM` (+ `MLXLMCommon`) linked and building for iOS in CI, pinned at `mlx-swift-lm` **3.31.4**
+  exactly — not `main` (`docs/RESEARCH_LOG.md` §3: `main`'s `Package.swift` lists
+  `MLXGuidedGeneration`, which does not exist in the tagged release CI actually builds against).
+  Guided generation is Phase 4's problem (tool calling), not Step 7's — `ModelCapabilities.gemma4E2B`
+  already encodes `guidedGeneration: false` for exactly this reason.
 - Model download via `URLSession` background config: resumable, Wi-Fi default, real byte progress.
+  `mlx-swift-lm`'s `Downloader` (`Libraries/MLXLMCommon/Downloader.swift`) is a plain protocol —
+  `download(id:revision:matching:useLatest:progressHandler:)` — not a fixed implementation, so LCL
+  writes its own conformance backed by a real background `URLSession` rather than accepting
+  whatever the library's built-in Hugging Face downloader does by default. `verified` (read
+  directly at the pinned tag).
 - Load/unload on a dedicated actor; `MLX.GPU.set(cacheLimit:)` by RAM tier.
-- Chat template via the tokenizer — **not** hand-assembled strings.
-- Thinking-delimiter parsing → `.thinking` events.
+- Chat template via `ChatSession` (`Libraries/MLXLMCommon/ChatSession.swift`) — it owns turn-tag
+  assembly and KV-cache management internally from `Chat.Message`s; `Gemma4Provider` never
+  hand-assembles `<|turn>` strings. `verified` (read directly at the pinned tag).
+- Thinking-delimiter parsing → `.thinking` events. Concrete token strings and the exact
+  `Generation`-to-`GenerationEvent` mapping now researched — `docs/RESEARCH_LOG.md` §12,
+  `docs/MODEL_INTEGRATION.md` §3.
 - `ModelLifecycleCoordinator`: unload on background, memory pressure, thermal, idle.
 
 **Done (CI):** links and builds; provider unit-testable with a stubbed container.

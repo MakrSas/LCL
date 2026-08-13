@@ -362,6 +362,50 @@ fact instead of one flagged as needing a later device check (previously listed i
 
 ---
 
+## 12. Gemma 4's thinking-token delimiters
+
+`docs/MODEL_INTEGRATION.md` §3 has said since it was written that thinking output "is delimited by
+the model's own reasoning markers" without saying what they are — the actual parser can't be
+written from that sentence. First concrete answer, from Google's own chat-template documentation
+(`ai.google.dev/gemma/docs/core/prompt-formatting-gemma4`, fetched and summarized 2026-08-13, not
+independently cross-checked against a second primary source — see confidence note below):
+
+- Turn structure uses `<|turn>ROLE` ... `<turn|>`, not the `<start_of_turn>`/`<end_of_turn>` tokens
+  older Gemma generations used. A prompt-formatting change from Gemma 2/3, not a minor detail.
+- Thinking is **off by default**. It is turned on by including the control token `<|think|>` inside
+  the system instruction — there is no separate boolean flag at the mlx-swift-lm API layer; per
+  `Evaluate.swift`'s `Generation` enum (below), the library has no `enable_thinking` parameter of its
+  own, so this has to be something `Gemma4Provider` assembles into the system instruction it hands
+  `ChatSession.instructions` when `ModelCapabilities.gemma4E2B.supportsThinking` should be honored.
+- When active, a turn's raw text carries the reasoning inline as
+  `<|channel>thought\n[reasoning]\n<channel|>[response text]` — i.e. there is no separate stream
+  from the library for this (see below); `Gemma4Provider` must scan `.chunk` text for
+  `<|channel>thought` / `<channel|>` itself and split what's between them into `GenerationEvent
+  .thinking`, the rest into `.prose`. This is exactly the parsing job `docs/MODEL_INTEGRATION.md` §3
+  already assumed exists; what was missing was the literal token strings to scan for.
+
+**What `mlx-swift-lm` 3.31.4 gives for free vs. what `Gemma4Provider` still has to do** (from reading
+`Libraries/MLXLMCommon/Evaluate.swift` and `ChatSession.swift` at the pinned tag directly — this part
+`verified`, not summarized): `ChatSession.streamDetails(to:)` returns
+`AsyncThrowingStream<Generation, Error>`, where `Generation` is `.chunk(String)`, `.info
+(GenerateCompletionInfo)`, `.toolCall(ToolCall)` — no `.thinking` case. `GenerateCompletionInfo` has
+`promptTokenCount`, `generationTokenCount`, `tokensPerSecond` — a direct fit for
+`ModelProvider.swift`'s `TokenUsage`. So the mapping for `Gemma4Provider.stream(_:)` is: drive
+`ChatSession.streamDetails`, run every `.chunk`'s text through the `<|channel>thought` scanner above
+before re-emitting as `.thinking`/`.prose`, map `.info` straight to `.usage`, and `.toolCall` is out
+of scope until Phase 4. `ChatSession` also does the chat-template/turn-tag assembly and KV-cache
+management itself — `Gemma4Provider` does not need to hand-assemble `<|turn>` strings, only feed it
+`Chat.Message`s.
+
+**Confidence note:** the delimiter tokens themselves (`<|turn>`, `<|think|>`, `<|channel>thought`)
+come from one WebFetch-summarized page, not read verbatim by a human or cross-checked against a
+second source — treat as `likely`, not `verified`, until Step 7's first device run shows real
+`<|channel>` markers (or their absence) in actual output. If they don't appear, the fallback is
+cheap: log ten turns of raw un-parsed `.chunk` output once thinking is requested, and read the
+literal tokens Gemma 4 actually emits rather than trust the docs a second time.
+
+---
+
 ## 8. Deliberately not yet researched
 
 These do not affect Phase 1 and will be verified at the start of the phase that needs them.
