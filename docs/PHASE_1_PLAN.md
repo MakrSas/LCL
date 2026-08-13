@@ -66,38 +66,55 @@ appearances.
 
 ## Step 2 — Persistence
 
-- GRDB stack: `DatabaseQueue` for writes, pool for reads, migrations.
-- Schema: `chats`, `messages`, `attachments`, `models`, `settings`, `archive_events`.
-- FTS5 virtual table over message content with BM25.
-- `Archive` — append-only, never mutated.
-- Data Protection on the DB file; excluded from iCloud backup.
+**Shipped (2026-08-13):** `chat` + `message` tables, external-content FTS5 with BM25 ranking,
+Data Protection + backup exclusion on the DB file, and `ChatStore` — the actor exposing exactly
+the operations `ChatViewModel` needs (`createChat`, `listChats`, `deleteChat`, `loadMessages`,
+`insertMessage`, `finishMessage`, `search`). See `LCL/Core/Persistence/`. Tests in
+`ChatStoreTests.swift` cover round-trip, ordering, cascade delete, ranked search, and FTS5's
+special characters surviving ordinary user text — all against the real schema via
+`AppDatabase.openInMemory()`, no device required.
 
-**Done:** round-trip tests; FTS search returns ranked results; migration from empty runs clean.
+`attachments`, `models`, `settings`, `archive_events` deliberately **not yet built** — nothing
+in Phase 1 needs them yet (`settings` still lives in `AppSettings`, in-memory; attachments are
+Phase 3 vision work; `models`/Model Manager is Step 8; `archive_events` is the Context Engine's,
+Phase 2). Adding a table later is a new migration, not a rewrite of this one — GRDB's migrator
+runs migrations forward-only and in order, so nothing here needs to anticipate their shape now.
 
-### `ChatViewModel` integration seam (pre-verified, code TBD)
+**Still open:** wiring `ChatStore` into `ChatViewModel` itself (the five-point integration seam
+below) and into `AppRoot`'s `onNewChat`. Deliberately left for its own change — it touches the
+same files as this week's sidebar work, which has an unconfirmed on-device fix in flight
+(docs/RESEARCH_LOG.md §11), and mixing the two would make a regression in either one harder to
+isolate.
 
-Reviewed 2026-08-13 to save a research round-trip once the exact GRDB schema lands. `ChatViewModel`
-today (`LCL/Features/Chat/ChatViewModel.swift`) holds `messages: [ChatMessage]` purely in memory —
-five concrete points need to change, and nowhere else does:
+**Done:** round-trip tests ✅; FTS search returns ranked results ✅; migration from empty runs
+clean ✅ (all in `ChatStoreTests.swift`, exercised on every CI run). `ChatViewModel` wiring is
+the remaining item before Step 2 is fully done.
 
-1. **`init`** needs a `chatID` and a persistence dependency, and should load that chat's existing
-   messages instead of always starting empty.
-2. **`send()`** persists the user message immediately after appending it in memory (so it survives
-   a kill before the assistant even responds), and persists the assistant message's row once
-   created (empty, `isStreaming: true`) so a chat interrupted mid-stream still has a placeholder to
-   resume into.
-3. **`flush()` must NOT persist on every call.** It already runs on a ~16ms display timer
-   (`docs/ARCHITECTURE.md` §11) — writing to SQLite at that rate would be pure waste. The database
-   only needs the *final* text.
-4. **`finishStreaming()`** is therefore the real persistence point: one write of the completed
-   text, thinking, and `TokenUsage` once a turn actually finishes (including on `stop()`, which
-   already routes through `finishStreaming()` — a stopped generation still persists whatever
-   arrived).
+### `ChatViewModel` integration seam (`ChatStore` shipped, wiring TBD)
+
+Reviewed 2026-08-13, before `ChatStore` existed, to save a research round-trip once the schema
+landed — it has now (above), with method names chosen to match this seam exactly. `ChatViewModel`
+today (`LCL/Features/Chat/ChatViewModel.swift`) still holds `messages: [ChatMessage]` purely in
+memory — five concrete points need to change, and nowhere else does:
+
+1. **`init`** needs a `chatID` and a `ChatStore`, and should call `loadMessages(chatID:)` instead
+   of always starting empty.
+2. **`send()`** calls `insertMessage(_:chatID:)` immediately after appending to memory — once for
+   the user message (so it survives a kill before the assistant even responds), once for the
+   assistant placeholder (empty, `isStreaming: true`) so a chat interrupted mid-stream still has a
+   row to resume into.
+3. **`flush()` must NOT call `insertMessage`/`finishMessage` on every call.** It already runs on a
+   ~16ms display timer (`docs/ARCHITECTURE.md` §11) — writing to SQLite at that rate would be pure
+   waste. The database only needs the *final* text.
+4. **`finishStreaming()`** is therefore the one caller of `finishMessage(_:text:thinking:usage:)`:
+   a single write of the completed text, thinking, and `TokenUsage` once a turn actually finishes
+   (including on `stop()`, which already routes through `finishStreaming()` — a stopped generation
+   still persists whatever arrived).
 5. **`clear()`** currently wipes the in-memory array, which matches spec §80 for a mock model with
-   nothing to lose — but is wrong the moment persistence exists. "New Chat" must *start a new chat
-   row* and switch the active `chatID`, never delete history the app promised never to destroy
-   (`docs/CONTEXT_ENGINE.md` §1). `AppRoot`'s `onNewChat: { viewModel.clear() }` needs to become
-   "create chat, switch to it" for the same reason.
+   nothing to lose — but is wrong the moment persistence exists. "New Chat" must call
+   `createChat()` and switch the active `chatID`, never delete history the app promised never to
+   destroy (`docs/CONTEXT_ENGINE.md` §1). `AppRoot`'s `onNewChat: { viewModel.clear() }` needs to
+   become "create chat, switch to it" for the same reason.
 
 None of `send`/`stop`/`regenerate`/`flush`'s *streaming* logic needs to change — persistence is
 additive at specific points, not a rewrite of the flow.
@@ -119,8 +136,12 @@ The first real UI, and the hardest gesture work in the app — done early becaus
 - Chat's own top bar is a plain `HStack` via `.safeAreaInset(edge: .top)` — matching the
   composer's `.safeAreaInset(edge: .bottom)`, which never had a positioning problem. A system
   toolbar did, once rendered inside the drawer's transformed ancestor; removed rather than
-  chased further with padding guesses. (2026-08-13 research pass into *why* is what informs
-  whether this needs hardening further — see `docs/RESEARCH_LOG.md` once that lands.)
+  chased further with padding guesses. Root cause confirmed, not just worked around:
+  `NavigationStack`'s toolbar bridges to `UINavigationController` and has independently-reported
+  reliability problems under layout changes (`docs/RESEARCH_LOG.md` §11). Safe-area insets are
+  now captured once in `AppRoot` from a reader that never ignores the safe area, sidestepping a
+  disputed `GeometryProxy.safeAreaInsets` behavior rather than relying on either side of it
+  (`docs/RESEARCH_LOG.md` §11).
 - No scale, no shadow on the reveal — both cost real frames for no benefit.
 - Progressive backdrop dim, hit-testable only once genuinely open.
 - One latched threshold haptic.

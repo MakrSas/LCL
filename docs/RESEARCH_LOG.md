@@ -301,6 +301,67 @@ direction, and nearly cost the product 4× its usable context.
 
 ---
 
+## 11. Sidebar architecture — safe-area insets, NavigationStack/toolbar, no native replacement
+
+Written after a night of shipping five separate sidebar builds that each fixed the reported symptom
+and broke or left broken something else. The pattern each time was a plausible-sounding cause
+(rendering cost, layout resize, a missing padding) shipped without being checked against a primary
+source. This section is that check, done properly, so `SidebarContainer` stops being guessed at.
+
+**Question 1 — does `GeometryProxy.safeAreaInsets` read zero or true insets when the `GeometryReader`
+that owns it has `.ignoresSafeArea()` applied to itself?**
+
+This is genuinely disputed. Two directly-fetched sources gave opposite answers: one holds that
+`.ignoresSafeArea()` zeroes the insets the reader itself reports (the reader now thinks it *is* the
+full screen, so it has no insets left to report); the other holds the proxy still reports the true
+device insets regardless, because `.ignoresSafeArea()` only affects layout/painting, not what the
+proxy measures. Neither source is Apple's own API reference, which does not specify this interaction.
+`unverified` (disputed, not merely under-documented)
+
+**Resolution shipped:** stop relying on the disputed case entirely. `AppRoot` now owns a plain
+`GeometryReader` that never calls `.ignoresSafeArea()` on itself — the one case both sources agree
+on — reads `rootProxy.safeAreaInsets` there, and passes `topInset`/`bottomInset` down to
+`SidebarContainer` as constants. `SidebarContainer`'s own inner reader still ignores the safe area
+(it has to, so the drawer's offset/clip math operates on the true full-bleed screen rather than one
+already shrunk by the system), but it no longer asks that reader for insets — it only consumes the
+ones handed to it. This sidesteps the dispute rather than picking a side of it.
+
+**Question 2 — is `NavigationStack`'s `.toolbar` a reasonable thing to combine with the drawer's
+offset/clip/mask machinery?**
+
+No. `NavigationStack` bridges to `UINavigationController` under the hood, and its toolbar has
+multiple long-standing, independently-reported reliability problems on Apple Developer Forums —
+titles and trailing items overlapping or auto-collapsing into a "..." overflow button under layout
+changes that a plain SwiftUI view would handle without incident (forum threads 722329, 723658,
+795300, 812480, 671541). `verified` (multiple independent first-party forum reports, not a single
+anecdote)
+
+This matches exactly what was observed tonight: the first attempt at giving content two rounded
+corners used a real `.frame(width:)` resize, which forced `NavigationStack` to relayout inside a
+~70pt-narrower toolbar and produced the overlapping "LCL 5:56" title/clock screenshot the user caught.
+Two independent problems compounded here — the toolbar's own fragility, and the fact that a
+resizing `.frame` is the wrong tool against a UIKit-bridged component regardless.
+
+**Resolution shipped:** `NavigationStack`/`.toolbar` removed from `ChatView` entirely, replaced with
+a plain `HStack` positioned via `.safeAreaInset(edge: .top)` — pure SwiftUI, additive-only, no
+UIKit bridge, and structurally identical to the composer's already-working
+`.safeAreaInset(edge: .bottom)`. Add `NavigationStack` back only once Phase 1 has a real push
+destination to justify it, and keep it away from any view under active offset/clip/mask animation.
+
+**Question 3 — does iOS 26 have a native API that produces a finger-following, edge-drawer sidebar
+like ChatGPT's, making the whole custom `SidebarContainer` unnecessary?**
+
+No. Checked against the WWDC 2026 session on `NavigationSplitView` (session 269) and current API
+docs: on compact-width iPhone, `NavigationSplitView` collapses its columns to a plain push/pop stack.
+There is no drag-to-reveal, no partial-open state, and no way to opt back into one — the collapse
+behavior is not configurable. `verified` (session 269 + current documentation, in agreement)
+
+This confirms rather than discovers: Phase 1's decision to build `SidebarContainer` as a custom
+container was already made on this assumption. What changed is that the assumption is now a checked
+fact instead of one flagged as needing a later device check (previously listed in §8).
+
+---
+
 ## 8. Deliberately not yet researched
 
 These do not affect Phase 1 and will be verified at the start of the phase that needs them.
@@ -312,7 +373,5 @@ Listed so nothing is silently assumed:
 - SwiftData vs GRDB benchmarked at scale — decision made on FTS5 availability, not measured perf.
 - App Store Review Guidelines for apps that download model weights and modify their own source.
   **This is a real product risk and must be resolved before any submission.** Not a Phase 1 blocker.
-- Whether `NavigationSplitView` can produce a finger-following drawer on iPhone. Assumed **no**
-  (columns collapse to a stack); Phase 1 builds a custom container. Needs a device check.
 - On-device Foundation Models framework as a cheap host-side worker (titles, compaction, query
   rewriting) — attractive, unverified.
