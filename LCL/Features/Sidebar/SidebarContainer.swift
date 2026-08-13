@@ -97,6 +97,18 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                     .accessibilityHidden(progress < 0.9)
 
                 content
+                    // Same reasoning as sidebar's padding above, and it turns out just as
+                    // necessary: NavigationStack's toolbar does NOT reliably self-inset once
+                    // its ancestor is full-bleed, despite being UIKit-backed. Confirmed by
+                    // testing — narrowing content's frame was NOT the cause of the missing
+                    // safe area (that fix changed nothing here), so pad explicitly instead of
+                    // relying on NavigationStack to handle it on its own.
+                    //
+                    // Top only. The composer already reserves its own bottom space via
+                    // `.safeAreaInset(edge: .bottom)` inside ChatView — padding the bottom
+                    // here too, on top of that, would double the gap above it. No confirmed
+                    // evidence the bottom is actually broken, unlike the top.
+                    .padding(.top, insets.top)
                     .disabled(isOpen)
                     .overlay {
                         Color.black
