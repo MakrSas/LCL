@@ -83,7 +83,8 @@ The first real UI, and the hardest gesture work in the app — done early becaus
 - `AppRoot`: chat surface + custom sidebar container.
 - Edge-swipe drawer: 1:1 finger tracking, no animation while dragging, velocity settle via
   `predictedEndTranslation`, interruptible mid-flight.
-- Surface translate + scale + `Radius.sidebarPeel`; progressive backdrop dim.
+- Surface translate + small constant `Radius.sidebarReveal` (no scale, no shadow — both cost
+  real frames); progressive backdrop dim, hit-testable only once genuinely open.
 - One latched threshold haptic.
 - VoiceOver button alternative.
 - Rows: Library, Pinned, Recent, New Chat, Settings. **Nothing that does not exist yet.**

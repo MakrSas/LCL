@@ -175,8 +175,15 @@ Recent
 
 - Edge swipe from the left, **1:1 with the finger**, no animation while dragging.
 - Velocity-aware settle using `predictedEndTranslation`; **interruptible** mid-flight.
-- Chat surface translates and scales slightly, gaining `Radius.sidebarPeel` corners.
-- Backdrop dims progressively with drag position.
+- Chat surface translates only — no scale, no shadow, both cost real frames for no benefit.
+  Gains a small constant `Radius.sidebarReveal` corner at the leading edge; deliberately not a
+  screen-bezel-sized radius, which would clip straight through the toolbar/composer controls
+  living at that exact edge (see the token's doc comment).
+- Sidebar sits underneath and stays static; the chat sliding off it is what reveals it — no
+  parallax, which left a black gap between the two.
+- Backdrop dims progressively with drag position, and is only hit-testable once the sidebar is
+  genuinely open — the earlier `progress > 0.5` gate created a window where it and the edge-grab
+  gesture were both eligible for the same touch, which was the real cause of the drag stutter.
 - One latched haptic at the open/close threshold — no chatter on re-crossing.
 - Tap outside or swipe back to close.
 - **VoiceOver gets a real button**, because an edge swipe is not discoverable.

@@ -64,8 +64,21 @@ enum Radius {
     static let control: CGFloat = 12
     static let surface: CGFloat = 20
     static let sheet: CGFloat = 28
-    /// The chat surface when the sidebar is open.
-    static let sidebarPeel: CGFloat = 36
+
+    /// The sidebar reveal edge, where the chat surface curves away as the drawer opens.
+    ///
+    /// Deliberately small, and NOT the device's actual screen-corner radius (~55pt). `.offset`
+    /// moves an already-clipped view as one rigid shape, so the rounded corner baked into the
+    /// chat's own top-left/bottom-left travels *with* the offset — landing exactly at the
+    /// reveal boundary, where the toolbar's sidebar toggle and the composer's leading control
+    /// both live. A screen-sized radius reaches far enough inward to clip straight through
+    /// them; a bigger radius clips *more*, not less. This value is chosen to sit safely inside
+    /// both controls' inset from that edge (composer: ~26pt; toolbar: system default, never
+    /// tighter than this in practice), so the curve never reaches an interactive element.
+    ///
+    /// Constant rather than scaled with the drawer's progress, so it never re-rasterises
+    /// mid-drag the way an animated radius does.
+    static let sidebarReveal: CGFloat = 12
 
     /// Concentric inset: a control inset by `inset` inside a surface of radius `outer`.
     /// Mismatched concentricity is the most common reason custom UI looks amateur.

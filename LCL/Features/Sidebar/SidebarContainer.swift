@@ -6,10 +6,12 @@ import SwiftUI
 /// `NavigationSplitView` collapses to a stack on iPhone and gives no drag-to-reveal drawer,
 /// so this is a custom container (docs/PRODUCT_SPEC.md §6).
 ///
-/// Deliberately plain: offset and a dim, nothing else. Every decorative addition tried here —
-/// parallax, corner radius, scale, shadow — produced a visible defect or cost real frames:
+/// Deliberately plain: offset, a small constant corner radius, and a dim — nothing else. Every
+/// OTHER decorative addition tried here produced a visible defect or cost real frames:
 ///   • parallax left a black gap between the drawer and the content
-///   • a large corner radius clipped through the toolbar button
+///   • a *large* corner radius (screen-bezel size, or the old 36pt "peel") clipped straight
+///     through the toolbar/composer controls sitting at the reveal edge — see
+///     `Radius.sidebarReveal` for why bigger is worse here, not better
 ///   • scale and shadow forced the whole subtree to re-rasterise each frame
 struct SidebarContainer<Sidebar: View, Content: View>: View {
     @Binding var isOpen: Bool
@@ -79,14 +81,11 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                             .accessibilityLabel("Close sidebar")
                             .accessibilityAddTraits(.isButton)
                     }
-                    // Rounded while sliding, at surface radius rather than the larger peel
-                    // radius: a 36pt curve cut through the toolbar button sitting in that
-                    // corner, which is why this was removed before.
+                    // Small and constant — see Radius.sidebarReveal for why a literal
+                    // screen-corner radius clips straight through the toolbar/composer
+                    // controls that sit at this exact edge.
                     .clipShape(
-                        RoundedRectangle(
-                            cornerRadius: Radius.surface * progress,
-                            style: .continuous
-                        )
+                        RoundedRectangle(cornerRadius: Radius.sidebarReveal, style: .continuous)
                     )
                     .offset(x: width * progress)
             }
