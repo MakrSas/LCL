@@ -153,41 +153,45 @@ Interactive, finger-following. `NavigationSplitView` collapses to a stack on iPh
 drag-to-reveal drawer, so this is a custom container (spec §10).
 
 ```
-LCL                        ⌕
-
-Library
-Projects
-Plugins
-Activity
-Scheduled
-GitHub
-Images
-
-Pinned
-  › Native Model Manager
+LCL                        ⨯
 
 Recent
-  › Streaming performance
-  › Liquid Glass questions
+  › first user message, truncated
 
-[New Chat]          [Settings]
+[New Chat]              [⚙]
 ```
+
+Phase 1 ships only what's real: **Recent** (derived live from the transcript, shown only when
+non-empty) and the two footer actions. Library, Projects, Plugins, Activity, Scheduled, GitHub,
+Images, Pinned, and Search all arrive with the phases that back them — a row leading to an empty
+screen is worse than no row (spec §2). The mock in earlier drafts of this doc showed the
+*eventual* full sidebar; this is what actually ships now.
+
+### Reveal mechanics
 
 - Edge swipe from the left, **1:1 with the finger**, no animation while dragging.
 - Velocity-aware settle using `predictedEndTranslation`; **interruptible** mid-flight.
-- Chat surface translates only — no scale, no shadow, both cost real frames for no benefit.
-  Gains a small constant `Radius.sidebarReveal` corner at the leading edge; deliberately not a
-  screen-bezel-sized radius, which would clip straight through the toolbar/composer controls
-  living at that exact edge (see the token's doc comment).
-- Sidebar sits underneath and stays static; the chat sliding off it is what reveals it — no
-  parallax, which left a black gap between the two.
+- Sidebar sits **underneath** and never moves — the chat narrows to reveal it, not the other way
+  around. No parallax (left a black gap between the two).
+- The chat's **layout is never resized** to narrow it — that broke its own toolbar once it had to
+  relayout in as little as ~70pt (overlapping title, iOS collapsing controls into a "…" overflow
+  button). Instead a custom `RevealClip` shape masks the chat to a narrower *visible* slice while
+  its internal layout stays full width throughout, so nothing inside it ever learns the drawer
+  exists.
+- That mask is asymmetrically rounded: a small radius at the reveal (leading) edge, sized to
+  clear the toolbar toggle and composer's `+` sitting right there, and the full device-corner
+  radius at the trailing edge, which — because of how the mask is built — coincides with the
+  screen's own true right edge, so nothing sits there to clip.
+- The chat's own top bar is a plain `HStack` positioned via `.safeAreaInset(edge: .top)`, the
+  same mechanism the composer already uses at the bottom — not a system `NavigationStack`
+  toolbar, which proved unreliable about self-inseting under the status bar once rendered inside
+  this offset/masked ancestor.
 - Backdrop dims progressively with drag position, and is only hit-testable once the sidebar is
-  genuinely open — the earlier `progress > 0.5` gate created a window where it and the edge-grab
-  gesture were both eligible for the same touch, which was the real cause of the drag stutter.
+  genuinely open — an earlier `progress > 0.5` gate created a window where it and the edge-grab
+  gesture were both eligible for the same touch, the real cause of an early drag stutter.
 - One latched haptic at the open/close threshold — no chatter on re-crossing.
 - Tap outside or swipe back to close.
 - **VoiceOver gets a real button**, because an edge swipe is not discoverable.
-- Phase 1 shows only rows that exist: Library, Recent, Pinned, New Chat, Settings.
 
 ---
 

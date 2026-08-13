@@ -146,10 +146,14 @@ enum Space {
 }
 
 enum Radius {
-    static let control: CGFloat = 12  // buttons, chips
-    static let surface: CGFloat = 20  // user message, cards
-    static let sheet: CGFloat = 28    // sheets, composer
-    static let sidebarPeel: CGFloat = 36  // chat surface when sidebar is open
+    static let control: CGFloat = 12       // buttons, chips
+    static let surface: CGFloat = 20       // user message, cards
+    static let sheet: CGFloat = 28         // sheets, composer
+    static let sidebarReveal: CGFloat = 12 // chat's leading edge once the sidebar is open —
+                                            // small on purpose, clears the toolbar/composer
+                                            // controls sitting right at that edge
+    static let deviceCorner: CGFloat = 55  // chat's trailing edge once narrowed — coincides
+                                            // with the true screen edge, nothing sits there
     // containers use .rect(cornerRadius:style: .continuous) — never .circular
 }
 ```
@@ -242,20 +246,25 @@ immediate cross-fade with no translation. Nothing becomes non-functional — it 
 Gesture-driven motion must be **interruptible**: a spring settle that cannot be grabbed mid-flight is
 the single clearest tell of non-native UI.
 
-### Never animate a view that contains glass
+### A note on chasing the wrong cause
 
-Glass samples whatever sits behind it, so **moving, scaling or clipping a view that contains a glass
-surface forces that glass to re-sample its backdrop every frame.** This is expensive, and it gets worse
-the more correctly you use the system's glass controls.
+An earlier version of this section claimed glass re-sampling cost was why the sidebar drag stuttered,
+and prescribed "never offset a view containing glass" as a rule. That diagnosis was wrong. The real
+cause, found by actually reading the gesture code rather than guessing at rendering cost: two
+`DragGesture` instances (the edge-grab strip and the dim overlay) shared one mutable state bucket with
+an overlap window where both were simultaneously hit-testable, so they wrote `dragTranslation` from
+two different translation origins and the offset snapped mid-drag. A second, independent bug
+(`DragGesture`'s `translation` already carrying `minimumDistance` of travel on the first event) caused
+a small pop at the start of every drag. Fixing both — gating hit-testing on `isOpen` so exactly one
+region is ever active, and capturing a translation baseline to subtract — fixed the drag completely.
+The chat's glass composer is offset every single frame during the drag today, in the shipped
+architecture, with no perceptible cost.
 
-Learned the hard way: the sidebar originally pushed the chat aside, and the chat contains a glass
-composer and a glass toolbar. Three attempts to smooth it failed — removing an animated shadow, then a
-duplicated animation, then an animated corner radius and scale — because none of them was the real
-cost. The fix was structural: **the drawer slides over static content, which only dims.** Only a plain
-`VStack` with an opaque background translates.
-
-Rule: animate opaque things. If a transform must cross a glass surface, move the glass *itself* rather
-than a container holding it.
+**The lesson, not the rule:** a rendering-cost explanation is *plausible* for almost any animation
+stutter, which is exactly why it's a dangerous first guess — it can't be disproven by inspection, only
+by finding and fixing the actual bug and observing whether the symptom survives. Read the interaction
+code (gesture state, hit-testing, ownership of a shared mutable value) before reaching for "this is
+just expensive."
 
 ---
 

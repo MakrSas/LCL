@@ -80,14 +80,24 @@ appearances.
 
 The first real UI, and the hardest gesture work in the app — done early because everything sits inside it.
 
-- `AppRoot`: chat surface + custom sidebar container.
+- `AppRoot`: chat surface + custom sidebar container, no `NavigationStack` (nothing to push to
+  yet, and its toolbar proved unreliable inside the drawer's offset/mask anyway — see below).
 - Edge-swipe drawer: 1:1 finger tracking, no animation while dragging, velocity settle via
   `predictedEndTranslation`, interruptible mid-flight.
-- Surface translate + small constant `Radius.sidebarReveal` (no scale, no shadow — both cost
-  real frames); progressive backdrop dim, hit-testable only once genuinely open.
+- Chat is masked to a narrower slice by a custom `RevealClip` shape, never actually resized —
+  its layout stays full width throughout so nothing inside it (top bar, composer) ever has to
+  relayout for the drawer. Asymmetric rounding: small at the reveal edge (clears the toolbar
+  toggle and composer's `+`), full device-corner at the trailing edge (nothing sits there).
+- Chat's own top bar is a plain `HStack` via `.safeAreaInset(edge: .top)` — matching the
+  composer's `.safeAreaInset(edge: .bottom)`, which never had a positioning problem. A system
+  toolbar did, once rendered inside the drawer's transformed ancestor; removed rather than
+  chased further with padding guesses. (2026-08-13 research pass into *why* is what informs
+  whether this needs hardening further — see `docs/RESEARCH_LOG.md` once that lands.)
+- No scale, no shadow on the reveal — both cost real frames for no benefit.
+- Progressive backdrop dim, hit-testable only once genuinely open.
 - One latched threshold haptic.
 - VoiceOver button alternative.
-- Rows: Library, Pinned, Recent, New Chat, Settings. **Nothing that does not exist yet.**
+- Rows: Recent (only when non-empty), New Chat, Settings. **Nothing that does not exist yet.**
 
 **Done:** CI green; sidebar works in simulator tests. **Device gate:** does the drag actually feel
 native? This is the single most important feel question in Phase 1.
