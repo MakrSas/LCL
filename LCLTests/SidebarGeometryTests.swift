@@ -188,4 +188,29 @@ final class SidebarGeometryTests: XCTestCase {
 
         XCTAssertEqual(bounds.height, offered.height, accuracy: 0.5)
     }
+
+    // MARK: - End-to-end, against the real Layout.sidebarWidth
+
+    /// The unit tests above use representative constants; this closes the loop against the
+    /// actual production function, so a future change to `Layout.sidebarWidth` that broke the
+    /// trailing-edge invariant would fail here even if every function above still passed in
+    /// isolation.
+    func testTrailingEdgeInvariantHoldsForRealScreenWidths() {
+        // iPhone widths from the smallest currently-supported device to the largest, in points.
+        for screenWidth: CGFloat in [375, 390, 393, 402, 430] {
+            let width = Layout.sidebarWidth(for: screenWidth)
+            for progress: CGFloat in [0, 0.25, 0.5, 0.75, 1] {
+                let narrowed = SidebarGeometry.narrowedWidth(
+                    screenWidth: screenWidth,
+                    sidebarWidth: width,
+                    progress: progress
+                )
+                let offset = width * progress
+                XCTAssertEqual(
+                    offset + narrowed, screenWidth, accuracy: 0.01,
+                    "trailing edge drifted from the true screen edge at width=\(screenWidth), progress=\(progress)"
+                )
+            }
+        }
+    }
 }

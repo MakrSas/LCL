@@ -34,6 +34,12 @@ import SwiftUI
 ///     compresses — which reads as broken in a way a correctly-masked reveal doesn't
 struct SidebarContainer<Sidebar: View, Content: View>: View {
     @Binding var isOpen: Bool
+    /// Captured by `AppRoot` from an ordinary `GeometryReader` that does **not**
+    /// `.ignoresSafeArea()`, and handed down as plain constants — see the call site for why.
+    /// This container only ever consumes them; it must never try to re-derive them from its
+    /// own (necessarily full-bleed) reader below.
+    let topInset: CGFloat
+    let bottomInset: CGFloat
     @ViewBuilder var sidebar: Sidebar
     @ViewBuilder var content: Content
 
@@ -68,15 +74,15 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
         // space entirely — static, unclipped, never sliding with the rest of the screen. This
         // is what produced the gaps and the flat (non-rounded) edge once fully open: those
         // strips were never part of the animated geometry to begin with.
+        //
+        // Because this reader ignores the safe area, its OWN `proxy.safeAreaInsets` is not
+        // used for anything — two directly-fetched sources gave opposite answers for whether
+        // it reports zero or the true device insets once a reader ignores its own safe area,
+        // and rather than trust either, `topInset`/`bottomInset` are captured by `AppRoot`
+        // from a separate, ordinary reader that never ignores anything, and simply passed in.
         GeometryReader { proxy in
             let width = Layout.sidebarWidth(for: proxy.size.width)
             let progress = SidebarGeometry.progress(isOpen: isOpen, dragTranslation: dragTranslation, width: width)
-            // `proxy.safeAreaInsets` still reports the true device insets even though the
-            // reader itself ignores them for layout — this is the standard way to get a
-            // full-bleed frame while still knowing where the notch/home-indicator are, so a
-            // plain view (unlike NavigationStack's own toolbar, which insets itself
-            // automatically) can be told explicitly to stay clear of them.
-            let insets = proxy.safeAreaInsets
             let narrowedWidth = SidebarGeometry.narrowedWidth(
                 screenWidth: proxy.size.width,
                 sidebarWidth: width,
@@ -94,25 +100,18 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                 // `ignoresSafeAreaEdges: .vertical`, so the grey fill still reaches the true
                 // top and bottom edges — only the rows/buttons inside stay inset.
                 sidebar
-                    .padding(.top, insets.top)
-                    .padding(.bottom, insets.bottom)
+                    .padding(.top, topInset)
+                    .padding(.bottom, bottomInset)
                     .frame(width: width)
                     .background(Palette.canvasRaised, ignoresSafeAreaEdges: .vertical)
                     .accessibilityHidden(progress < 0.9)
 
                 content
-                    // Same reasoning as sidebar's padding above, and it turns out just as
-                    // necessary: NavigationStack's toolbar does NOT reliably self-inset once
-                    // its ancestor is full-bleed, despite being UIKit-backed. Confirmed by
-                    // testing — narrowing content's frame was NOT the cause of the missing
-                    // safe area (that fix changed nothing here), so pad explicitly instead of
-                    // relying on NavigationStack to handle it on its own.
-                    //
                     // Top only. The composer already reserves its own bottom space via
                     // `.safeAreaInset(edge: .bottom)` inside ChatView — padding the bottom
                     // here too, on top of that, would double the gap above it. No confirmed
                     // evidence the bottom is actually broken, unlike the top.
-                    .padding(.top, insets.top)
+                    .padding(.top, topInset)
                     .disabled(isOpen)
                     .overlay {
                         Color.black
