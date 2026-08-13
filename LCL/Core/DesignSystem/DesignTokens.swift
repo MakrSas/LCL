@@ -65,6 +65,12 @@ enum Radius {
     static let surface: CGFloat = 20
     static let sheet: CGFloat = 28
 
+    /// The screen's own physical corner, used ONLY where nothing interactive sits at that
+    /// exact corner. Currently: the chat surface's TRAILING edge once the sidebar drawer has
+    /// narrowed it (its true right edge then coincides with the real screen edge, and no
+    /// control lives there — unlike the leading edge, see `sidebarReveal` below).
+    static let deviceCorner: CGFloat = 55
+
     /// The sidebar reveal edge, where the chat surface curves away as the drawer opens.
     ///
     /// Deliberately small, and NOT the device's actual screen-corner radius (~55pt). `.offset`
