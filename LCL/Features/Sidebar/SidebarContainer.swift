@@ -6,27 +6,32 @@ import SwiftUI
 /// `NavigationSplitView` collapses to a stack on iPhone and gives no drag-to-reveal drawer,
 /// so this is a custom container (docs/PRODUCT_SPEC.md §6).
 ///
-/// The content genuinely narrows as the drawer opens — not a fixed-width view sliding mostly
-/// off-screen. That distinction is what lets its trailing edge round to match the reveal edge,
-/// rather than showing the flat, unrounded *middle* of an oversized rectangle (see the `.frame`
-/// call in `body`). It is a real width change, not a `.scaleEffect` — `.scaleEffect` is cheaper
-/// but visually squashes everything inside (icons go elliptical, text compresses), which reads
-/// as broken in a way an actual reflow doesn't.
+/// Content's LAYOUT is always full width — its `NavigationStack`, toolbar and composer never
+/// know the drawer exists, and never reflow. Only the VISIBLE portion narrows, via a clip mask
+/// (`RevealClip`, below `body`), not a frame change. That distinction went through two wrong
+/// attempts before landing here:
+///   • pure offset (no narrowing at all): content's true trailing edge — the one with rounded
+///     corners — slides off-screen the instant it's offset, so what's visible at the screen's
+///     true right edge is the flat, unrounded *middle* of an oversized rectangle.
+///   • narrowing content's actual `.frame(width:)`: fixes the rounding, but forces
+///     `NavigationStack` to relay out its toolbar in as little as ~70pt once mostly closed by
+///     the drawer — not enough room, so the title and toggle button overlapped and iOS started
+///     collapsing toolbar items into an overflow "..." button. A real layout change was the
+///     wrong tool even before considering its per-frame cost during a drag.
+/// `RevealClip` reads as a real, narrower "floating card" without content ever finding out its
+/// own width changed.
 ///
 /// Corner radii are asymmetric: small on the leading edge (`Radius.sidebarReveal`), where the
 /// toolbar toggle and composer's `+` actually live, and full device-corner size on the trailing
 /// edge (`Radius.deviceCorner`), where nothing does. A single large radius on the leading side
 /// clips straight through those controls.
 ///
-/// The narrowed width itself is applied only when settled or animating a settle — never while a
-/// finger is down. See the `.frame` call in `body` for why: resizing a `NavigationStack`'s real
-/// layout width every frame while it's simultaneously the live target of a touch is a plausible
-/// source of drag stutter, and it's the reason there is a difference between "actively dragging"
-/// and "at rest / settling" in this file at all.
-///
-/// Two other things tried here were real defects, not stylistic misses, and stayed removed:
+/// Three other things tried here were real defects, not stylistic misses, and stayed removed:
 ///   • parallax on a *static* drawer left a black gap between it and the content
 ///   • shadow forces the whole surface to re-rasterise every frame
+///   • `.scaleEffect` (as an alternative to narrowing) is cheaper than a real width change, but
+///     visually squashes everything inside non-uniformly — icons go elliptical, text
+///     compresses — which reads as broken in a way a correctly-masked reveal doesn't
 struct SidebarContainer<Sidebar: View, Content: View>: View {
     @Binding var isOpen: Bool
     @ViewBuilder var sidebar: Sidebar
@@ -72,7 +77,6 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             // plain view (unlike NavigationStack's own toolbar, which insets itself
             // automatically) can be told explicitly to stay clear of them.
             let insets = proxy.safeAreaInsets
-            let isInteractivelyDragging = isHorizontalDrag == true
             let narrowedWidth = proxy.size.width - width * progress
 
             ZStack(alignment: .leading) {
@@ -120,36 +124,25 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                             .accessibilityLabel("Close sidebar")
                             .accessibilityAddTraits(.isButton)
                     }
-                    // Narrowed width, but ONLY when settled or animating a settle — never while
-                    // a finger is actively down. Two reasons:
+                    // NEVER constrain content's actual frame/layout width — that was the bug in
+                    // the previous attempt. Narrowing the real frame forced NavigationStack to
+                    // relayout its toolbar in as little as ~70pt, which isn't enough room:
+                    // the title and toggle button overlapped, and iOS started collapsing
+                    // toolbar items into an overflow "..." button. Content is always laid out
+                    // at its full, unconstrained width — the toolbar and composer never know
+                    // the drawer exists — and only the VISIBLE, CLIPPED portion narrows.
                     //
-                    // 1. `nil` (no constraint at all) when progress == 0, not "a frame that
-                    //    happens to equal full width". Merely HAVING a `.frame(width:)` modifier
-                    //    present — regardless of its value — was enough to make NavigationStack
-                    //    stop self-inseting its own toolbar under the status bar. `nil` genuinely
-                    //    removes the modifier's effect, matching pre-fix behaviour exactly at
-                    //    rest, where nothing was ever broken.
-                    // 2. While `isInteractivelyDragging`, content stays full width with plain
-                    //    offset — the same mechanics already proven smooth. Reflowing a
-                    //    NavigationStack's real layout width every frame while it's ALSO the
-                    //    live target of an active touch is a plausible source of the stutter
-                    //    reported when closing from deep inside the narrow sliver: the touch
-                    //    system and the resizing view were fighting over the same moving
-                    //    boundary. The narrowed, two-sided-rounded shape only appears once the
-                    //    finger lifts, animated in by the same spring as the position settle.
-                    .frame(width: isInteractivelyDragging || progress == 0 ? nil : narrowedWidth)
-                    // Asymmetric on purpose. The leading corners sit where the toolbar toggle
-                    // and composer's `+` live, so they stay small (Radius.sidebarReveal) to
-                    // clear those controls. The trailing corners, once narrowed, coincide with
-                    // the screen's own true right edge — nothing sits there, so they can use the
-                    // full device-corner radius without clipping anything.
+                    // `RevealClip` (below) ignores the rect SwiftUI offers it (content's full
+                    // width) and builds its own path at exactly `narrowedWidth`, anchored to
+                    // content's leading edge — which, after the same offset used below, lands
+                    // precisely on the true screen edge. Because this is a mask, not a layout
+                    // change, it costs nothing extra during an active drag either: no more
+                    // reason to special-case interactive dragging separately from settling.
                     .clipShape(
-                        UnevenRoundedRectangle(
-                            topLeadingRadius: Radius.sidebarReveal,
-                            bottomLeadingRadius: Radius.sidebarReveal,
-                            bottomTrailingRadius: Radius.deviceCorner,
-                            topTrailingRadius: Radius.deviceCorner,
-                            style: .continuous
+                        RevealClip(
+                            width: narrowedWidth,
+                            leadingRadius: Radius.sidebarReveal,
+                            trailingRadius: Radius.deviceCorner
                         )
                     )
                     .offset(x: width * progress)
@@ -231,5 +224,30 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             isOpen = open
         }
         latch.reset(isPast: open)
+    }
+}
+
+/// Clips to a `width`-wide slice of the view's LEADING edge, asymmetrically rounded — a mask,
+/// deliberately not a `.frame` change (see the call site in `SidebarContainer.body`).
+///
+/// A plain `.clipShape(UnevenRoundedRectangle(...))` sizes itself to whatever view it's applied
+/// to, which is exactly what we don't want here: content stays laid out at its full width, and
+/// only a narrower slice of it should be visibly rounded. `Shape.path(in:)` receives the
+/// containing view's rect regardless — this type deliberately ignores its offered `width` and
+/// substitutes its own, using only `rect.height` and `rect.minY`.
+private struct RevealClip: Shape {
+    let width: CGFloat
+    let leadingRadius: CGFloat
+    let trailingRadius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        let slice = CGRect(x: rect.minX, y: rect.minY, width: width, height: rect.height)
+        return UnevenRoundedRectangle(
+            topLeadingRadius: leadingRadius,
+            bottomLeadingRadius: leadingRadius,
+            bottomTrailingRadius: trailingRadius,
+            topTrailingRadius: trailingRadius,
+            style: .continuous
+        ).path(in: slice)
     }
 }
