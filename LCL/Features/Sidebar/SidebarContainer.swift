@@ -18,10 +18,23 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var dragTranslation: CGFloat = 0
-    /// Decided once per gesture. Re-testing per event skipped updates on a diagonal drag,
-    /// which is what made manual dragging stutter.
+    /// Decided once per gesture. Re-testing per event dropped updates on a diagonal drag.
     @State private var isHorizontalDrag: Bool?
+
+    /// `DragGesture.Value.translation` is measured from the initial touch, not from wherever
+    /// `minimumDistance` was cleared — so the first delivered event already carries up to
+    /// `minimumDistance` of travel baked in. Applied verbatim, that pops the drawer a few
+    /// points the instant the gesture is recognised, ahead of the finger. This is that first
+    /// sample, captured once and subtracted from every later one, so tracking starts exactly
+    /// under the fingertip.
+    @State private var translationBaseline: CGFloat = 0
+
     @State private var latch = ThresholdLatch()
+
+    /// `@State`, deliberately not `@GestureState`, for all of the above. `@GestureState`
+    /// auto-resets when a gesture ends, in its own transaction separate from the
+    /// `withAnimation` block in `onEnded` — which is precisely the mechanism behind the
+    /// already-fixed bug where the settle animation visibly replayed on release.
 
     private let edgeGrabWidth: CGFloat = 28
 
@@ -44,17 +57,37 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                         Color.black
                             .opacity(0.35 * progress)
                             .ignoresSafeArea()
-                            // The lock-up fix. This overlay used to swallow every touch
-                            // whenever `progress` was left even slightly above zero by an
-                            // interrupted gesture — invisible, but covering the screen. It can
-                            // only take a touch once the drawer is genuinely open.
-                            .allowsHitTesting(progress > 0.5)
+                            // Gated on `isOpen`, NOT on progress. This is the drag-stutter fix.
+                            //
+                            // The edge strip below is gated on `!isOpen`, so driving both from
+                            // the same boolean makes exactly one of them hit-testable at any
+                            // moment. With the previous `progress > 0.5` gate there was a real
+                            // overlap window: during an opening drag `isOpen` stays false until
+                            // release, so the edge strip remained mounted while this overlay
+                            // became eligible halfway through — two separately recognised
+                            // gestures competing for one touch, writing to the same
+                            // `dragTranslation` from *different* translation origins. That made
+                            // the offset snap from ~150pt to ~5pt within a single frame, right
+                            // around the halfway mark of every drag.
+                            //
+                            // It also still fixes the lock-up: an interrupted gesture can no
+                            // longer leave an invisible full-screen view eating every touch.
+                            .allowsHitTesting(isOpen)
                             .onTapGesture { setOpen(false) }
                             .gesture(drag(width: width))
-                            .accessibilityHidden(progress < 0.5)
+                            .accessibilityHidden(!isOpen)
                             .accessibilityLabel("Close sidebar")
                             .accessibilityAddTraits(.isButton)
                     }
+                    // Rounded while sliding, at surface radius rather than the larger peel
+                    // radius: a 36pt curve cut through the toolbar button sitting in that
+                    // corner, which is why this was removed before.
+                    .clipShape(
+                        RoundedRectangle(
+                            cornerRadius: Radius.surface * progress,
+                            style: .continuous
+                        )
+                    )
                     .offset(x: width * progress)
             }
             .overlay(alignment: .leading) {
@@ -86,12 +119,14 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
             .onChanged { value in
                 if isHorizontalDrag == nil {
                     isHorizontalDrag = abs(value.translation.width) > abs(value.translation.height)
+                    // Whatever translation has already accumulated becomes this gesture's zero.
+                    translationBaseline = value.translation.width
                     if isHorizontalDrag == true { latch.reset(isPast: isOpen) }
                 }
                 // Once the gesture is claimed as horizontal, follow every event. Re-deciding
                 // per event dropped updates mid-drag and the offset jumped when they resumed.
                 guard isHorizontalDrag == true else { return }
-                dragTranslation = value.translation.width
+                dragTranslation = value.translation.width - translationBaseline
                 latch.update(isPast: progress(width: width) > 0.5)
             }
             .onEnded { value in
@@ -106,7 +141,12 @@ struct SidebarContainer<Sidebar: View, Content: View>: View {
                 }
 
                 // Velocity-aware: a fast flick wins over distance travelled.
-                let predicted = (isOpen ? width : 0) + value.predictedEndTranslation.width
+                // `predictedEndTranslation` shares the same touch-down origin as `translation`,
+                // so it needs the identical baseline correction — otherwise this decision is
+                // off by a constant from what was actually on screen, which matters for short
+                // fast flicks near the threshold.
+                let predicted = (isOpen ? width : 0)
+                    + (value.predictedEndTranslation.width - translationBaseline)
                 let shouldOpen = predicted > width * 0.5
 
                 // Both inside ONE animation block. Resetting the translation outside it snapped
