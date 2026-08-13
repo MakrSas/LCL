@@ -38,6 +38,29 @@ struct MarkdownParser {
     /// Index of the first line not yet folded into a settled block.
     private var settledLineIndex = 0
     private var nextBlockID = 0
+    /// The id of the block currently occupying the unsettled tail (an unclosed fence, or the
+    /// still-growing/not-yet-final trailing paragraph), if any — reused by `nextID()` instead
+    /// of minting a fresh one. Without this, every call re-derives the tail from scratch and
+    /// hands it a brand-new id, so the actively-streaming block's identity changes on every
+    /// flush: `MarkdownView`'s `ForEach` sees it as a new row each time, and `.appearOnce()`
+    /// replays its fade-in on every ~16ms tick instead of staying stable like the doc comment
+    /// on that modifier promises. Cleared the moment that block is actually folded into
+    /// `settled` — see `nextID()`.
+    private var pendingBlockID: Int?
+
+    /// Reuses `pendingBlockID` when set (and clears it — a given reuse is one-shot); mints and
+    /// advances `nextBlockID` otherwise. Callers that construct a block which might still be
+    /// unsettled when this call returns (the fence and paragraph branches) are responsible for
+    /// re-arming `pendingBlockID` with the id this returns if that block is, in fact, still
+    /// unsettled — see those call sites.
+    private mutating func nextID() -> Int {
+        if let pending = pendingBlockID {
+            pendingBlockID = nil
+            return pending
+        }
+        defer { nextBlockID += 1 }
+        return nextBlockID
+    }
 
     /// Returns the blocks for `source`, re-parsing only the unsettled tail.
     mutating func blocks(for source: String) -> [MarkdownBlock] {
@@ -78,17 +101,20 @@ struct MarkdownParser {
                     code.append(lines[cursor])
                     cursor += 1
                 }
+                let id = nextID()
                 let block = MarkdownBlock.codeBlock(
-                    id: nextBlockID,
+                    id: id,
                     language: language.isEmpty ? nil : language,
                     code: code.joined(separator: "\n")
                 )
-                nextBlockID += 1
                 if closed {
                     newlySettled.append(block)
                     index = cursor + 1
                     newlySettledIndex = index
                 } else {
+                    // Still open: this exact id must survive to the next call, or the fence's
+                    // identity churns every flush while it streams in.
+                    pendingBlockID = id
                     result.append(contentsOf: newlySettled)
                     result.append(block)
                     settled.append(contentsOf: newlySettled)
@@ -166,12 +192,22 @@ struct MarkdownParser {
                 continue
             }
 
-            // Paragraph: runs until a blank line or a line that starts another block.
+            // Paragraph: runs until a blank line or a line that starts another block. The
+            // first line always belongs to this paragraph regardless of its own shape — it
+            // already failed every other classifier above, including the heading check just
+            // above: a bare "#", or any hash run with nothing (or no space) after it, starts
+            // with "#" but isn't a *valid* heading, so it falls through to here. Excluding
+            // `cursor == index` from the break is what makes that safe: without it, that same
+            // line would immediately "end" a zero-line paragraph, `cursor` would equal `index`
+            // going into the branch below, and the outer `while index < lines.count` loop
+            // would re-evaluate the identical line forever. This was a real, deterministic CI
+            // hang (docs/RESEARCH_LOG.md), not a hypothetical.
             var parts: [String] = []
             var cursor = index
             while cursor < lines.count {
                 let candidate = lines[cursor].trimmingCharacters(in: .whitespaces)
-                if candidate.isEmpty || candidate.hasPrefix("```") || candidate.hasPrefix("#")
+                if cursor > index,
+                    candidate.isEmpty || candidate.hasPrefix("```") || candidate.hasPrefix("#")
                     || candidate.hasPrefix("> ") || Self.isBullet(candidate)
                     || Self.numberedPrefix(candidate) != nil {
                     break
@@ -179,19 +215,25 @@ struct MarkdownParser {
                 parts.append(candidate)
                 cursor += 1
             }
+            let id = nextID()
             let paragraph = MarkdownBlock.paragraph(
-                id: nextBlockID,
+                id: id,
                 text: Self.inline(parts.joined(separator: " "))
             )
-            nextBlockID += 1
 
             // A paragraph at the very end of the source may still be growing, so it is not
             // settled until a following line proves it finished.
             if cursor < lines.count {
+                // A following line already proved this paragraph finished, so it is about to
+                // be folded into `settled` (via `newlySettled` at whichever return below this
+                // call hits) — `id` is now permanent, nothing to re-arm.
                 newlySettled.append(paragraph)
                 index = cursor
                 newlySettledIndex = index
             } else {
+                // Still the last thing in the source: this exact id must survive to the next
+                // call, or the actively-streaming paragraph's identity churns every flush.
+                pendingBlockID = id
                 result.append(contentsOf: newlySettled)
                 result.append(paragraph)
                 settled.append(contentsOf: newlySettled)
@@ -209,6 +251,7 @@ struct MarkdownParser {
         settled = []
         settledLineIndex = 0
         nextBlockID = 0
+        pendingBlockID = nil
     }
 
     // MARK: Helpers

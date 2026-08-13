@@ -19,6 +19,13 @@ final class MarkdownParserTests: XCTestCase {
 
     /// Streaming a document token by token must never mutate earlier blocks. This is the
     /// property that keeps a long answer smooth instead of getting slower as it grows.
+    ///
+    /// This test used to hang CI indefinitely rather than fail it — `parser.blocks(for:)` never
+    /// terminated once `buffer` reached `"# Heading"`'s leading `"#"` character alone (see the
+    /// fix in `MarkdownView.swift`'s paragraph branch). It also, previously, asserted nothing
+    /// about the invariant its name promises: it updated `seen` whenever a block differed but
+    /// never actually failed the test over it. Both are fixed here — every block that isn't the
+    /// current call's last one must be byte-identical to whatever was seen for that id before.
     func testTokenByTokenStreamingNeverMutatesEarlierBlocks() {
         let source = """
         # Heading
@@ -36,15 +43,16 @@ final class MarkdownParserTests: XCTestCase {
 
         for character in source {
             buffer.append(character)
-            for block in parser.blocks(for: buffer) {
+            let blocks = parser.blocks(for: buffer)
+            for (offset, block) in blocks.enumerated() {
+                let isLast = offset == blocks.count - 1
                 if let previous = seen[block.id] {
-                    // A block may still be growing only if it is the last one.
-                    if previous != block {
-                        seen[block.id] = block
-                    }
-                } else {
-                    seen[block.id] = block
+                    XCTAssertTrue(
+                        isLast || previous == block,
+                        "settled block \(block.id) mutated after being seen once: \(previous) -> \(block)"
+                    )
                 }
+                seen[block.id] = block
             }
         }
 
@@ -52,6 +60,37 @@ final class MarkdownParserTests: XCTestCase {
         XCTAssertFalse(final.isEmpty)
         XCTAssertTrue(final.contains { if case .heading = $0 { return true } else { return false } })
         XCTAssertTrue(final.contains { if case .bulletList = $0 { return true } else { return false } })
+    }
+
+    /// A bare "#" is heading-shaped by prefix alone but fails the heading branch's own
+    /// "space after the hashes" check, so it falls through to paragraph parsing — whose "a new
+    /// block starts here" check must not fire on the very line that started this paragraph, or
+    /// `cursor` never advances past `index` and `blocks(for:)` spins forever. This is the exact
+    /// state streaming a heading token-by-token passes through on its very first character.
+    func testBareHashDoesNotHang() {
+        var parser = MarkdownParser()
+        let blocks = parser.blocks(for: "#")
+        XCTAssertEqual(blocks.count, 1)
+        guard case .paragraph(_, let text) = blocks.first else {
+            return XCTFail("expected a bare '#' to parse as a paragraph, got \(String(describing: blocks.first))")
+        }
+        XCTAssertEqual(String(text.characters), "#")
+    }
+
+    /// The actively-streaming trailing block must keep one id across every flush until it
+    /// settles. Without this, `MarkdownView`'s `ForEach` sees a new row every ~16ms display
+    /// tick and `.appearOnce()` replays its fade-in continuously — exactly what that modifier
+    /// exists to prevent, and invisible to a test that never grows a block across more than
+    /// two calls.
+    func testGrowingTrailingBlockKeepsStableID() {
+        var parser = MarkdownParser()
+        let afterH = parser.blocks(for: "H")
+        let afterHe = parser.blocks(for: "He")
+        let afterHel = parser.blocks(for: "Hel")
+
+        XCTAssertEqual(afterH.count, 1)
+        XCTAssertEqual(afterHe.first?.id, afterH.first?.id)
+        XCTAssertEqual(afterHel.first?.id, afterH.first?.id)
     }
 
     /// An unterminated fence must stay unsettled, otherwise a half-streamed code block would
