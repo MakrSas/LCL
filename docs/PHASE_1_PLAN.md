@@ -164,8 +164,30 @@ Built before Chat, because Chat's performance depends entirely on it.
 - `CodeBlock`: language label, Copy, horizontal scroll, syntax highlighting for ~8 languages.
 - Full Dynamic Type support; selectable text.
 
-**Done:** unit tests for incremental parsing (append a token → only the last block changes);
-performance test appending 4000 tokens stays within budget.
+**2026-08-13 — four real bugs found and fixed, all in `blocks(for:)`'s per-character/per-token
+path** (a CI test hang surfaced the first; hand-tracing every remaining classifier against the
+same test source, rather than fixing one bug and re-trusting the rest, surfaced the other three):
+1. A bare `#` (heading-shaped by prefix, invalid as a heading) fell through into paragraph
+   parsing, whose own termination check fired on that same line — zero progress, infinite loop.
+   Every heading-first stream passed through this state on its first character.
+2. The block still open at the end of a call (an unclosed fence, or the actively-streaming
+   trailing paragraph) got a brand-new id every single call instead of reusing one — the
+   currently-typing block's identity churned every ~16ms flush, defeating `.appearOnce()`.
+3. Bullet/numbered/quote items committed the instant the source ran out of lines to scan, with
+   no check for whether the last item might still be mid-word — froze partial text permanently
+   and started a spurious second list on the next line.
+4. Headings and dividers committed on first pattern match with no "is this really the last
+   line" check either — a heading's text froze at whatever it was on its first valid character
+   (`"# H"` staying `"H"` forever). Blank-line handling had the same gap.
+All four are the same root cause in different branches: committing before proving a line is
+actually finished, rather than deferring (via a new `pendingBlockID`) until a following line
+proves it. Fixed, with regression tests for each; full suite (47 tests) now runs in ~5s, was a
+9-minute timeout before.
+
+**Done:** unit tests for incremental parsing (append a token → only the last block changes) ✅.
+Performance test appending 4000 tokens stays within budget — not yet written; the bugs above were
+found by hand-tracing and CI's pass/fail signal, not by a timed benchmark, so this remains a real
+gap against Step 4's original done-criteria.
 
 ---
 
